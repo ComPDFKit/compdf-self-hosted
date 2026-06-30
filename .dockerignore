@@ -1,0 +1,15 @@
+.git
+.codegraph
+.playwright-cli
+.DS_Store
+.env
+configs/*.jwt
+!configs/license.jwt
+output
+server/node_modules
+server/dist
+server/tmp
+frontend/compdf-web/node_modules
+frontend/compdf-web/dist
+frontend/dashboard/node_modules
+frontend/dashboard/dist

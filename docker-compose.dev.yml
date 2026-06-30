@@ -1,0 +1,140 @@
+services:
+  compdf-infra:
+    image: compdfkit/compdf-infra:1.0.0
+    platform: ${COMPDF_IMAGE_PLATFORM:-linux/amd64}
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      RUSTFS_ACCESS_KEY: compdfkit-ak
+      RUSTFS_SECRET_KEY: compdfkit-sk-2026
+    volumes:
+      - compdf_mysql_data:/var/lib/mysql
+      - compdf_redis_data:/data/redis
+      - compdf_rustfs_data:/data
+    ports:
+      - "13306:3306"
+      - "16379:6379"
+    mem_limit: 3g
+    restart: unless-stopped
+    networks:
+      - compdf-internal
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u compdfkit -pcompdfkit-pass-2026 --silent && redis-cli ping | grep -q PONG && curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9000/ | grep -qE '^[2-4]'"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  compdf-app:
+    image: compdfkit/compdf-app:1.0.0
+    platform: ${COMPDF_IMAGE_PLATFORM:-linux/amd64}
+    depends_on:
+      compdf-infra:
+        condition: service_healthy
+    environment:
+      - PORT=7000
+      - COMPDF_SDK_DIR=/opt/compdf_sdk
+      - CONVERT_TIMEOUT=300
+      - REDIS_URL=redis://compdf-infra:6379/0
+      - MYSQL_HOST=compdf-infra
+      - MYSQL_PORT=3306
+      - MYSQL_USER=compdfkit
+      - MYSQL_PASSWORD=compdfkit-pass-2026
+      - MYSQL_DATABASE=compdfkit
+      - MYSQL_DB=compdfkit
+      - S3_ENDPOINT=http://compdf-infra:9000
+      - S3_BUCKET=compdfkit
+      - S3_ACCESS_KEY=compdfkit-ak
+      - S3_SECRET_KEY=compdfkit-sk-2026
+      - SYNC_MAX_MB=50
+      - FAST_THRESHOLD_MB=10
+      - ASYNC_MAX_MB=100
+      - ASYNC_JOB_TIMEOUT=1800
+      - SYNC_WAIT_TIMEOUT=120
+      - RQ_QUEUES=fast,slow
+      - WORKER_THREADS=4
+      - MALLOC_ARENA_MAX=2
+      - MEM_WATCHDOG_THRESHOLD=0.85
+      - MEM_WATCHDOG_INTERVAL=30
+      - MEM_WATCHDOG_DRAIN_TIMEOUT=120
+      - JAVA_OPTS=-Xms512m -Xmx2048m -XX:MaxMetaspaceSize=256m -Djava.awt.headless=true
+      - COMPDF_LICENSE_KEY=${COMPDF_LICENSE_KEY}
+      - COMPDF_LICENSE_SECRET=${COMPDF_LICENSE_SECRET}
+      - COMPDF_LICENSE_APPID=${COMPDF_LICENSE_APPID:-com.compdfkit.conversion}
+      - COMPDF_AI_MODEL=${COMPDF_AI_MODEL:-/opt/compdf_sdk/models/documentai.model}
+      - COMPDFKIT_LICENSE=${COMPDF_LICENSE_KEY}
+      - API_TEMP_DIR=/tmp/compdfkit-engine
+      - API_FONT_DIR=/usr/local/share/fonts
+      - API_MAX_PAGES=500
+      - MAX_FILE_MB=100
+      - MAX_REQUEST_MB=200
+    ports:
+      - "7000:7000"
+      - "7001:7001"
+      - "9903:9903"
+    volumes:
+      - ./fonts/windows:/opt/compdf_sdk/fonts/windows:ro
+      - compdf_output:/tmp/compdf_output
+      - compdf_pdf_data:/data
+    restart: unless-stopped
+    mem_limit: 16g
+    networks:
+      - compdf-internal
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:7000/health',timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+
+  compdf-server:
+    image: compdfkit/compdf-server-dev:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "8080:8080"
+    depends_on:
+      compdf-infra:
+        condition: service_healthy
+      compdf-app:
+        condition: service_healthy
+    networks:
+      - compdf-internal
+    environment:
+      - NODE_ENV=development
+      - PORT=8080
+      - DATABASE_HOST=compdf-infra
+      - DATABASE_PORT=3306
+      - DATABASE_USER=${DATABASE_USER:-compdfkit}
+      - DATABASE_PASSWORD=${DATABASE_PASSWORD:-compdfkit-pass-2026}
+      - DATABASE_NAME=${DATABASE_NAME:-compdfkit}
+      - REDIS_HOST=compdf-infra
+      - REDIS_PORT=6379
+      - COMPDF_SDK_BASE_URL=${COMPDF_SDK_BASE_URL:-http://compdf-app:7000}
+      - PDF_SDK_BASE_URL=${PDF_SDK_BASE_URL:-http://compdf-app:7001}
+      - CONVERSION_BASE_URL=${CONVERSION_BASE_URL:-http://compdf-app:7000}
+      - LICENSE_TOKEN_PATH=/app/configs/license.jwt
+      - INIT_SQL_PATH=/app/configs/init.sql
+      - SETTINGS_PATH=/app/configs/settings.yml
+      - STORAGE_DIR=/app/storage
+    volumes:
+      - ./server:/app
+      - ./configs:/app/configs
+      - server-node-modules:/app/node_modules
+      - server-storage:/app/storage
+    command: ["sh", "-c", "npm run init:db:dev && npm run start:dev"]
+
+volumes:
+  compdf_output:
+  compdf_redis_data:
+  compdf_pdf_data:
+  compdf_mysql_data:
+  compdf_rustfs_data:
+  server-node-modules:
+  server-storage:
+
+networks:
+  compdf-internal:
+    driver: bridge

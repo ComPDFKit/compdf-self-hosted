@@ -1,0 +1,21 @@
+# configs/settings.yml — ComPDF Self-Hosted v4.1.0 static defaults
+#
+# These are bootstrap/default display + retention settings. At runtime the
+# server reads authoritative values from the `system_settings` table
+# (see configs/init.sql); this file seeds first-boot defaults only.
+# License limits (concurrency / pages / watermark) are NEVER configured here —
+# they are enforced by the closed-source app from the signed license JWT
+# (configs/license.jwt). See architecture-v2.md §5.
+
+branding:
+  site_name: "ComPDF Self-Hosted"
+  logo_path: null
+  theme_color: "#1976D2"
+
+ui:
+  locale: "zh-CN"
+  dark_mode: false
+
+retention:
+  # Days processed files are kept before cleanup. P0 default 7.
+  file_retention_days: 7
