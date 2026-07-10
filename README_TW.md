@@ -1,3 +1,9 @@
+# <mark>⚠️ 倉庫地址已遷移</mark>
+
+<mark>**本倉庫已停止維護，最新程式碼與後續更新請前往新倉庫查看：[https://github.com/ComPDF/compdf-self-hosted](https://github.com/ComPDF/compdf-self-hosted)**</mark>
+
+
+
 [English](README.md) | [繁體中文](README_TW.md) | [简体中文](README_CN.md)
 
 # ComPDF Self-hosted — 開源 PDF 編輯器與 PDF 轉檔工具
