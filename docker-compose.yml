@@ -1,0 +1,87 @@
+services:
+  compdf-infra:
+    image: compdfkit/compdf-infra:1.0.0
+    platform: ${COMPDF_IMAGE_PLATFORM:-linux/amd64}
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      RUSTFS_ACCESS_KEY: compdfkit-ak
+      RUSTFS_SECRET_KEY: compdfkit-sk-2026
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+      - ./data/redis:/data/redis
+      - ./data/rustfs:/data
+    mem_limit: 3g
+    restart: unless-stopped
+    networks:
+      - compdf-internal
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u compdfkit -pcompdfkit-pass-2026 --silent && redis-cli ping | grep -q PONG && curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:9000/ | grep -qE '^[2-4]'"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  compdf-app:
+    image: compdfkit/compdf-app:1.0.0
+    platform: ${COMPDF_IMAGE_PLATFORM:-linux/amd64}
+    depends_on:
+      compdf-infra:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://compdf-infra:6379/0
+      - MYSQL_HOST=compdf-infra
+      - S3_ENDPOINT=http://compdf-infra:9000
+      - COMPDF_LICENSE_KEY=${COMPDF_LICENSE_KEY}
+      - COMPDFKIT_LICENSE=${COMPDF_LICENSE_KEY}
+    ports:
+      - "7000:7000"
+      - "7001:7001"
+      - "9903:9903"
+    volumes:
+      - ./fonts/windows:/opt/compdf_sdk/fonts/windows:ro
+      - ./data/output:/tmp/compdf_output
+      - ./data/pdf:/data
+    restart: unless-stopped
+    mem_limit: 16g
+    networks:
+      - compdf-internal
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:7000/health',timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+
+  compdf-server:
+    image: compdfkit/compdf-server:1.0.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    ports:
+      - "8080:8080"
+    depends_on:
+      compdf-infra:
+        condition: service_healthy
+      compdf-app:
+        condition: service_healthy
+    networks:
+      - compdf-internal
+    environment:
+      - PDF_SDK_BASE_URL=${PDF_SDK_BASE_URL:-http://compdf-app:7001}
+      - CONVERSION_BASE_URL=${CONVERSION_BASE_URL:-http://compdf-app:7000}
+    volumes:
+      - ./configs:/app/configs
+      - ./data/server-storage:/app/storage
+    command: ["sh", "-c", "npm run init:db && npm run start"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/v1/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+networks:
+  compdf-internal:
+    driver: bridge

@@ -1,0 +1,13 @@
+branding:
+  site_name: ComPDF Self Hosted
+  theme_color: '#0E48D8'
+  logo_file: null
+ui:
+  locale: en
+  dark_mode: false
+retention:
+  file_retention_days: 7
+marketing:
+  upgrade_banner_text: null
+  doc_url: null
+  contact_url: null

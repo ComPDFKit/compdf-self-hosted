@@ -1,0 +1,41 @@
+# Dependencies & build artifacts
+node_modules/
+dist/
+
+# Test artifacts
+coverage/
+.nyc_output/
+.vitest/
+.jest/
+jest-cache/
+server/tmp/
+test-results/
+playwright-report/
+*.lcov
+junit.xml
+
+# Async task result files (runtime, not committed)
+server/storage/
+
+# Python (mock-sdk local dev)
+.venv/
+__pycache__/
+*.pyc
+
+# Env & secrets (never commit real values)
+.env
+configs/license.local.jwt
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+
+# Harness scratch (SDD plan / progress / briefs / reports)
+.superpowers/
+
+# Private reference corpus (never committed)
+_workplace/
+
+test/
