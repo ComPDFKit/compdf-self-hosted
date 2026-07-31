@@ -1,14 +1,16 @@
+![ComPDF Solutions](images/ComPDF-Comprehensive%20PDF%20Solutions.png)
+
 # ComPDF Self-Hosted — 開源 PDF 編輯器與 PDF 轉檔工具
 
-[ComPDF Self-Hosted](https://www.compdf.com/self-hosted-deployment?utm_source=github_ai_selfhosted_newopen_tw&utm_medium=referral&utm_campaign=github_ai_selfhosted_newopen_tw&ref_platform_id=github_compdf_tw) 是 KDAN 生態系的一部分，提供可私有化部署的 PDF 編輯與轉檔功能，幫助團隊在私有 Docker 環境中安全處理 PDF、Office 文件與圖片。
+[ComPDF Self-Hosted](https://www.compdf.com/self-hosted-deployment?utm_source=github_ai_selfhosted_oldopen_tw&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_tw&ref_platform_id=github_compdf_tw) 是 KDAN 生態系的一部分，提供可私有化部署的 PDF 編輯與轉檔功能，幫助團隊在私有 Docker 環境中安全處理 PDF、Office 文件與圖片。
 
 > * 如果您覺得 ComPDF Self-Hosted 實用，請考慮在 GitHub 上為我們點亮一顆 ⭐ **Star**，支持我們持續成長與改進。
-> * 有任何問題或想法？歡迎前往 [Discussions](https://github.com/ComPDF/compdf-self-hosted/discussions) 與我們交流。
+> * 有任何問題或想法？歡迎前往 [Discussions](https://github.com/ComPDFKit/compdf-self-hosted) 與我們交流。
 
 <p align="center">
   <a href="#"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
   <a href="#"><img src="https://img.shields.io/badge/docker-supported-blue" alt="Docker"></a>
-  <a href="#"><img src="https://img.shields.io/github/stars/compdf/compdf-self-hosted" alt="GitHub Stars"></a>
+  <a href="#"><img src="https://img.shields.io/github/stars/ComPDFKit/compdf-self-hosted" alt="GitHub Stars"></a>
   <a href="#"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs Welcome"></a>
 </p>
 
@@ -19,7 +21,7 @@
   <a href="#升級至企業版"><b>升級至企業版</b></a> •
    <a href="#支援"><b>支援</b></a> •
   <a href="#授權條款"><b>授權條款</b></a> •
-  <a href="https://www.compdf.com/contact-sales?utm_source=github&utm_medium=referral&utm_campaign=compdf_self_hosted_open&ref_platform_id=github_compdfkit" target="_blank"><b>企業版 →</b></a>
+  <a href="https://www.compdf.com/contact-sales?utm_source=github&utm_medium=referral&utm_campaign=compdf_self_hosted_oldopen&ref_platform_id=github_compdfkit" target="_blank"><b>企業版 →</b></a>
 </p>
 
 ## 為什麼選擇 ComPDF Self-Hosted？
@@ -101,7 +103,7 @@ ComPDF Self-Hosted 提供統一的管理控制台，用於查看 API Key、API �
 
 如需使用正式版授權，請將申請取得的正式 License Key 填入 `.env` 檔案中的 `COMPDF_LICENSE_KEY` 欄位。修改 License Key 後，需重新啟動服務才會生效。
 
-**[申請正式版授權](https://www.compdf.com/contact-sales?utm_source=github_ai_seLfhosted_newopen_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_newopen_tw&ref_platform_id=github_compdf_tw)，即可使用以下功能：**
+**[申請正式版授權](https://www.compdf.com/contact-sales?utm_source=github_ai_seLfhosted_oldopen_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_oldopen_tw&ref_platform_id=github_compdf_tw)，即可使用以下功能：**
 
 * 輸出文件不含浮水印
 * 不限制文件頁數
@@ -127,7 +129,7 @@ ComPDF Self-Hosted 提供統一的管理控制台，用於查看 API Key、API �
     Dashboard:  http://localhost:5173/admin
     Server API: http://localhost:8080/api/v1/
 
-您也可以查看相關技術[文件](https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview?utm_source=github_ai_seLfhosted_newopen_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_newopen_tw&ref_platform_id=github_compdf_tw)。
+您也可以查看相關技術[文件](https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview?utm_source=github_ai_seLfhosted_oldopen_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_oldopen_tw&ref_platform_id=github_compdf_tw)。
 
 ### 3. 查看狀態和日誌
 
@@ -142,7 +144,7 @@ ComPDF Self-Hosted 提供統一的管理控制台，用於查看 API Key、API �
 
     docker compose -f docker-compose.yml up -d --build compdf-infra compdf-app compdf-server
 
-以上功能皆可於 [ComPDF](https://www.compdf.com/?utm_source=github_ai_seLfhosted_newopen_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_newopen_tw&ref_platform_id=github_compdf_tw) 線上體驗。→ [體驗連結](https://www.compdf.com/pdf-tools?utm_source=github_ai_seLfhosted_newopen_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_newopen_tw&ref_platform_id=github_compdf_tw)
+以上功能皆可於 [ComPDF](https://www.compdf.com/?utm_source=github_ai_seLfhosted_oldopen_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_oldopen_tw&ref_platform_id=github_compdf_tw) 線上體驗。→ [體驗連結](https://www.compdf.com/pdf-tools?utm_source=github_ai_seLfhosted_oldopen_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_oldopen_tw&ref_platform_id=github_compdf_tw)
 
 <a id="系統架構"></a>
 
@@ -194,7 +196,7 @@ ComPDF Self-Hosted 提供統一的管理控制台，用於查看 API Key、API �
 
 ## 升級至企業版
 
-[請聯絡銷售團隊](https://www.compdf.com/contact-sales?utm_source=github_ai_seLfhosted_newopen_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_newopen_tw&ref_platform_id=github_compdf_tw)，將方案升級至 **Enterprise** 版。
+[請聯絡銷售團隊](https://www.compdf.com/contact-sales?utm_source=github_ai_seLfhosted_oldopen_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_oldopen_tw&ref_platform_id=github_compdf_tw)，將方案升級至 **Enterprise** 版。
 
 | 功能  | 免費版 | 企業版 |
 | --- | --- | --- |
