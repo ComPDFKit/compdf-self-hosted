@@ -1,14 +1,16 @@
+![ComPDF Solutions](images/ComPDF-Comprehensive%20PDF%20Solutions.png)
+
 [English](README.md) | [繁體中文](README_TW.md) | [简体中文](README_CN.md)
 
 # ComPDF Self-Hosted — 开源 PDF 编辑器与 PDF 转换器
 
-作为 KDAN 生态的一部分，[ComPDF Self-Hosted](https://www.compdf.com/self-hosted-deployment?utm_source=github_ai_selfhosted_newopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_newopen_zh&ref_platform_id=github_compdf_zh) 提供自托管 PDF 编辑与文档转换能力，帮助团队在私有 Docker 环境中安全处理 PDF、Office 文件与图片。
+作为 KDAN 生态的一部分，[ComPDF Self-Hosted](https://www.compdf.com/self-hosted-deployment?utm_source=github_ai_selfhosted_oldopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_zh&ref_platform_id=github_compdf_zh) 提供自托管 PDF 编辑与文档转换能力，帮助团队在私有 Docker 环境中安全处理 PDF、Office 文件与图片。
 
 
 
 > - 如果您觉得 ComPDF Self-Hosted 实用，请考虑在 GitHub 上为我们点一颗 ⭐ **Star**，这有助于我们成长与改进。
 > 
-> - 有任何问题或想法？欢迎加入我们的 [Discussions](https://github.com/ComPDF/compdf-self-hosted/discussions) 讨论。
+> - 有任何问题或想法？欢迎加入我们的 [Discussions](https://github.com/ComPDFKit/compdf-self-hosted/discussions) 讨论。
 
 <p align="center">
   <a href="#"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
@@ -24,7 +26,7 @@
   <a href="#升级至企业版"><b>升级至企业版</b></a> •
    <a href="#支持"><b>支持</b></a> •
   <a href="#许可协议"><b>许可协议</b></a> •
-  <a href="https://www.compdf.com/contact-sales?utm_source=github_ai_selfhosted_newopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_newopen_zh&ref_platform_id=github_compdf_zh" target="_blank"><b>企业版 →</b></a>
+  <a href="https://www.compdf.com/contact-sales?utm_source=github_ai_selfhosted_oldopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_zh&ref_platform_id=github_compdf_zh" target="_blank"><b>企业版 →</b></a>
 </p>
 
 ## 为什么选择 ComPDF Self-Hosted？
@@ -111,7 +113,7 @@ Dashboard:  http://localhost:8080/admin
 如需使用正式版许可证，请将申请到的正式 License Key 替换到 `.env` 文件中的
 `COMPDF_LICENSE_KEY` 字段。License Key 修改后需要重启服务以生效。
 
-**[申请正式版许可证](https://www.compdf.com/contact-sales?utm_source=github_ai_selfhosted_newopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_newopen_zh&ref_platform_id=github_compdf_zh)，可获得以下权益：**
+**[申请正式版许可证](https://www.compdf.com/contact-sales?utm_source=github_ai_selfhosted_oldopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_zh&ref_platform_id=github_compdf_zh)，可获得以下权益：**
 
 * 无水印文档处理
 * 无文档页数限制
@@ -144,7 +146,7 @@ Dashboard:  http://localhost:5173/admin
 Server API: http://localhost:8080/api/v1/
 ```
 
-也可查看[文档](https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview?utm_source=github_ai_selfhosted_newopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_newopen_zh&ref_platform_id=github_compdf_zh)
+也可查看[文档](https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview?utm_source=github_ai_selfhosted_oldopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_zh&ref_platform_id=github_compdf_zh)
 
 ### 3. 查看状态和日志
 
@@ -166,7 +168,7 @@ docker compose -f docker-compose.dev.yml logs -f compdf-infra compdf-app
 docker compose -f docker-compose.yml up -d --build compdf-infra compdf-app compdf-server
 ```
 
-以上功能均可在 [ComPDF](https://www.compdf.com/?utm_source=github_ai_selfhosted_newopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_newopen_zh&ref_platform_id=github_compdf_zh) 上体验使用，→[体验地址](https://www.compdf.com/pdf-tools?utm_source=github_ai_selfhosted_newopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_newopen_zh&ref_platform_id=github_compdf_zh)
+以上功能均可在 [ComPDF](https://www.compdf.com/?utm_source=github_ai_selfhosted_oldopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_zh&ref_platform_id=github_compdf_zh) 上体验使用，→[体验地址](https://www.compdf.com/pdf-tools?utm_source=github_ai_selfhosted_oldopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_zh&ref_platform_id=github_compdf_zh)
 
 <a id="architecture"></a>
 
@@ -217,7 +219,7 @@ docker compose -f docker-compose.yml up -d --build compdf-infra compdf-app compd
 
 ## 升级至企业版
 
-[联系销售](https://www.compdf.com/contact-sales?utm_source=github_ai_selfhosted_newopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_newopen_zh&ref_platform_id=github_compdf_zh)  升级至 **Enterprise 版**
+[联系销售](https://www.compdf.com/contact-sales?utm_source=github_ai_selfhosted_oldopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_zh&ref_platform_id=github_compdf_zh)  升级至 **Enterprise 版**
 
 | 功能     | 免费版 | 企业版 |
 | ------ | --- | --- |
@@ -233,29 +235,29 @@ docker compose -f docker-compose.yml up -d --build compdf-infra compdf-app compd
 
 ## 文档
 
-- SDK 文档：[https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview](https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview?utm_source=github_ai_selfhosted_newopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_newopen_zh&ref_platform_id=github_compdf_zh)
+- SDK 文档：[https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview](https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview?utm_source=github_ai_selfhosted_oldopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_zh&ref_platform_id=github_compdf_zh)
 
-- API Reference：[https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/api-reference-conversion](https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/api-reference-conversion?utm_source=github_ai_selfhosted_newopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_newopen_zh&ref_platform_id=github_compdf_zh)
+- API Reference：[https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/api-reference-conversion](https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/api-reference-conversion?utm_source=github_ai_selfhosted_oldopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_zh&ref_platform_id=github_compdf_zh)
 
 
 <a id="support"></a>
 
 ## 支持
 
-有任何建议？[发起讨论](https://github.com/ComPDF/compdf-self-hosted/discussions)。如果您觉得 **ComPDF Self-Hosted** 实用，请考虑在 GitHub 上为我们点一颗 ⭐ **Star**，这有助于我们成长与改进。
+有任何建议？[发起讨论](https://github.com/ComPDFKit/compdf-self-hosted/discussions)。如果您觉得 **ComPDF Self-Hosted** 实用，请考虑在 GitHub 上为我们点一颗 ⭐ **Star**，这有助于我们成长与改进。
 
 <a id="license"></a>
 
 ## 许可协议
 
 - 本项目采用 MIT 许可协议。详见 LICENSE 文件。
-- ComPDF Self-Hosted 的商业版/企业版许可证请[联系销售团队](https://www.compdf.com/contact-sales?utm_source=github_ai_selfhosted_newopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_newopen_zh&ref_platform_id=github_compdf_zh)。
+- ComPDF Self-Hosted 的商业版/企业版许可证请[联系销售团队](https://www.compdf.com/contact-sales?utm_source=github_ai_selfhosted_oldopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_zh&ref_platform_id=github_compdf_zh)。
 
 ---
 
 <p align="center">
   <b>ComPDF 团队打造</b><br>
-  <a href="https://compdf.com?utm_source=github_ai_selfhosted_newopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_newopen_zh&ref_platform_id=github_compdf_zh">官网</a> ·
-  <a href="https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview?utm_source=github_ai_selfhosted_newopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_newopen_zh&ref_platform_id=github_compdf_zh">技术文档</a> ·
-  <a href="https://www.compdf.com/contact-sales?utm_source=github_ai_selfhosted_newopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_newopen_zh&ref_platform_id=github_compdf_zh">企业咨询</a>
+  <a href="https://compdf.com?utm_source=github_ai_selfhosted_oldopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_zh&ref_platform_id=github_compdf_zh">官网</a> ·
+  <a href="https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview?utm_source=github_ai_selfhosted_oldopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_zh&ref_platform_id=github_compdf_zh">技术文档</a> ·
+  <a href="https://www.compdf.com/contact-sales?utm_source=github_ai_selfhosted_oldopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_zh&ref_platform_id=github_compdf_zh">企业咨询</a>
 </p>
