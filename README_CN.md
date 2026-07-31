@@ -15,7 +15,7 @@
 <p align="center">
   <a href="#"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
   <a href="#"><img src="https://img.shields.io/badge/docker-supported-blue" alt="Docker"></a>
-  <a href="#"><img src="https://img.shields.io/github/stars/compdf/compdf-self-hosted" alt="GitHub Stars"></a>
+  <a href="#"><img src="https://img.shields.io/github/stars/ComPDFKit/compdf-self-hosted" alt="GitHub Stars"></a>
   <a href="#"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs Welcome"></a>
 </p>
 
