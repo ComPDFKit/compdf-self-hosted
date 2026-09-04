@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { TOOL_SECTIONS, resolveTool, resolveConversionTypes } from './convert-map';
 
-// Authoritative {fromType, toType} expectations for all 38 tools.
+// Authoritative {fromType, toType} expectations for all 39 tools.
 // Drives CONVERSION_FEATURES[`${fromType}/${toType}`] gating + buildRequest branching.
 const EXPECTED: Record<string, { fromType: string; toType: string }> = {
   // pdf→X (convert-target, fromType='pdf')
@@ -17,6 +17,7 @@ const EXPECTED: Record<string, { fromType: string; toType: string }> = {
   // pdf→X (convert-type, fromType='pdf')
   'pdf-to-editable': { fromType: 'pdf', toType: 'searchablePdf' },
   'pdf-to-ofd': { fromType: 'pdf', toType: 'ofd' },
+  'pdf-to-markdown': { fromType: 'pdf', toType: 'markdown' },
   // X→pdf (convert-to-pdf)
   'word-to-pdf': { fromType: 'docx', toType: 'pdf' },
   'rtf-to-pdf': { fromType: 'rtf', toType: 'pdf' },
@@ -50,9 +51,9 @@ const EXPECTED: Record<string, { fromType: string; toType: string }> = {
 };
 
 describe('convert-map', () => {
-  it('has exactly 38 tools across 5 sections', () => {
+  it('has exactly 39 tools across 5 sections', () => {
     const all = TOOL_SECTIONS.flatMap((s) => s.tools);
-    expect(all.length).toBe(38);
+    expect(all.length).toBe(39);
     expect(TOOL_SECTIONS.length).toBe(5);
   });
 
@@ -79,6 +80,10 @@ describe('convert-map', () => {
 
   it('pdf-to-ofd → convert-type pdf/ofd', () => {
     expect(resolveTool('pdf-to-ofd')!.endpoint).toEqual({ kind: 'convert-type', type: 'pdf/ofd' });
+  });
+
+  it('pdf-to-markdown → convert-type pdf/markdown', () => {
+    expect(resolveTool('pdf-to-markdown')!.endpoint).toEqual({ kind: 'convert-type', type: 'pdf/markdown' });
   });
 
   it('image-to-json → convert-type img/json', () => {
@@ -125,18 +130,18 @@ describe('convert-map', () => {
   });
 
   describe('resolveConversionTypes', () => {
-    it('the EXPECTED table covers exactly all 38 catalog tools', () => {
+    it('the EXPECTED table covers exactly all 39 catalog tools', () => {
       const all = TOOL_SECTIONS.flatMap((s) => s.tools);
-      expect(all.length).toBe(38);
+      expect(all.length).toBe(39);
       for (const t of all) {
         expect(EXPECTED[t.slug], `missing EXPECTED entry for ${t.slug}`).toBeDefined();
       }
-      expect(Object.keys(EXPECTED).length).toBe(38);
+      expect(Object.keys(EXPECTED).length).toBe(39);
     });
 
     it('returns the expected {fromType, toType} for every catalog tool', () => {
       const all = TOOL_SECTIONS.flatMap((s) => s.tools);
-      expect(all.length).toBe(38);
+      expect(all.length).toBe(39);
       for (const t of all) {
         const got = resolveConversionTypes(t);
         const want = EXPECTED[t.slug];

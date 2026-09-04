@@ -311,6 +311,7 @@ function sanitizeFilenameOrEmpty(filename: string | undefined): string {
 function outputExtensionForDto(dto: CreateTaskDto): string | undefined {
   if (dto.op === 'convert-to-pdf') return 'pdf';
   if (dto.target) return dto.target;
+  if (dto.type === 'pdf/markdown') return 'md';
   if (dto.type) {
     const parts = dto.type.split('/');
     return parts[parts.length - 1] || undefined;

@@ -9,5 +9,5 @@ export default defineConfig({
   // ESM internal import ("dist/blend/blend" path doesn't resolve). Inlining it
   // forces vite to transform the dep so the import resolves.
   server: { deps: { inline: [/tvision-color/, /@material/] } },
-  test: { environment: 'node', include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'], setupFiles: ['./test/setup.ts'] },
+  test: { environment: 'node', include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'] },
 });

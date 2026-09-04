@@ -63,6 +63,7 @@ const PROCESS_CONVERSION_ROUTES: Readonly<Record<string, ProcessConversionRoute>
   'pdf/rtf': { kind: 'target', value: 'rtf' },
   'pdf/pdf': { kind: 'type', value: 'pdf/pdf' },
   'pdf/ofd': { kind: 'type', value: 'pdf/ofd' },
+  'pdf/markdown': { kind: 'type', value: 'pdf/markdown' },
   'docx/pdf': { kind: 'to-pdf', value: 'docx/pdf' },
   'png/pdf': { kind: 'to-pdf', value: 'png/pdf' },
   'rtf/pdf': { kind: 'to-pdf', value: 'rtf/pdf' },
@@ -323,6 +324,7 @@ function outputExtensionForTarget(target: string | undefined): string | undefine
 
 function outputExtensionForType(type: string | undefined): string | undefined {
   if (!type) return undefined;
+  if (type === 'pdf/markdown') return 'md';
   const parts = type.split('/');
   return parts[parts.length - 1] || undefined;
 }

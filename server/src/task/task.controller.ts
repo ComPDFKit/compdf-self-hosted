@@ -234,6 +234,7 @@ const TASK_CONVERSION_ROUTES: Readonly<Record<string, CreateTaskDto>> = {
   'pdf/rtf': { kind: 'conversion', op: 'convert', target: 'rtf' },
   'pdf/pdf': { kind: 'conversion', op: 'convert', type: 'pdf/pdf' },
   'pdf/ofd': { kind: 'conversion', op: 'convert', type: 'pdf/ofd' },
+  'pdf/markdown': { kind: 'conversion', op: 'convert', type: 'pdf/markdown' },
   'docx/pdf': { kind: 'conversion', op: 'convert-to-pdf', type: 'docx/pdf' },
   'png/pdf': { kind: 'conversion', op: 'convert-to-pdf', type: 'png/pdf' },
   'rtf/pdf': { kind: 'conversion', op: 'convert-to-pdf', type: 'rtf/pdf' },

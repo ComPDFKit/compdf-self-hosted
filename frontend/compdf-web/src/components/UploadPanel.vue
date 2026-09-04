@@ -550,6 +550,7 @@ function handleMergeFileDelete(index: number) {
 function outputExtension(toType: string, ep: Endpoint): string {
   if (ep.kind === 'pdf') return ep.op === 'split' ? 'zip' : 'pdf';
   if (toType === 'searchablePdf') return 'pdf';
+  if (toType === 'markdown') return 'md';
   return toType || 'pdf';
 }
 
@@ -633,7 +634,14 @@ function fallbackFilename(): string {
 
       <div v-if="!['pdf', 'img'].includes(fromType)" class="err-text" >{{ errorText }}</div>
 
-      <Collapsible v-model:open="settingsOpen" class="settings-row" :class="{ 'split-settings-row': isSplitTool }">
+      <Collapsible
+        v-model:open="settingsOpen"
+        class="settings-row"
+        :class="{
+          'split-settings-row': isSplitTool,
+          'markdown-settings-row': toType === 'markdown',
+        }"
+      >
         <CollapsibleTrigger v-if="fromType !== 'img' && toType !== 'merge'" as-child>
           <div class="settings-toggle">
             <UnFoldIcon v-if="!settingsOpen" />
@@ -1311,6 +1319,14 @@ function fallbackFilename(): string {
 }
 
 @media (max-width: 768px) {
+  .markdown-settings-row {
+    padding-top: 36px;
+  }
+
+  .markdown-settings-row .settings-toggle {
+    top: 0;
+  }
+
   .converter-wrapper {
     padding: 24px 16px;
   }

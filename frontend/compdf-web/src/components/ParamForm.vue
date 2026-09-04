@@ -71,6 +71,7 @@ const converting = computed(() => props.converting ?? false);
 
 // ---- conversionKey + features ---------------------------------------------
 const isSearchablePdf = computed(() => props.fromType === 'pdf' && props.toType === 'searchablePdf');
+const isMarkdown = computed(() => props.fromType === 'pdf' && props.toType === 'markdown');
 
 /**
  * The current conversion key. Every tool in the self-hosted catalog has a fixed
@@ -86,6 +87,7 @@ const features = computed<ConversionFeatures>(() => CONVERSION_FEATURES[conversi
 
 // Template-friendly aliases.
 const hasFlowLayout = computed(() => !!features.value.flowLayout);
+const hasAiLayout = computed(() => !!features.value.aiLayout);
 const hasContainImg = computed(() => !!features.value.includeImages);
 const hasContainAnnotation = computed(() => !!features.value.includeAnnotations);
 const hasFormulaToImage = computed(() => !!features.value.formulaToImage);
@@ -260,11 +262,10 @@ watch(
 watch(
   conversionKey,
   (key) => {
-    if (key !== 'pdf/docx') return;
-    if (parameter.value.pageLayoutMode === 'e_Flow') {
+    if (key === 'pdf/docx' && parameter.value.pageLayoutMode === 'e_Flow') {
       parameter.value.pageLayoutMode = 'e_Box';
     }
-    if (parameter.value.formulaToImage === '0') {
+    if ((key === 'pdf/docx' || key === 'pdf/markdown') && parameter.value.formulaToImage === '0') {
       parameter.value.formulaToImage = '1';
     }
   },
@@ -286,7 +287,7 @@ watch(
 
 <template>
   <TooltipProvider :delay-duration="100">
-  <div class="param-form" :class="{ 'file-card-form': hasSplitOptions || hasMergeOptions }">
+  <div class="param-form" :class="{ 'file-card-form': hasSplitOptions || hasMergeOptions, 'markdown-form': isMarkdown }">
     <!-- 1. HTML output option -->
     <div v-if="hasHtmlOption" class="setting-row">
       <div class="setting-label">{{ t('pdfToolDetail.upload.settings.htmlFileOptions') }}:</div>
@@ -362,7 +363,7 @@ watch(
     </div>
 
     <!-- 7. Page range -->
-    <div v-if="hasPage && !hasSplitOptions" class="setting-row">
+    <div v-if="hasPage && !hasSplitOptions" class="setting-row" :class="{ 'markdown-order-2': isMarkdown }">
       <div class="setting-label">{{ t('pdfToolDetail.upload.settings.pageRange') }}:</div>
       <div class="setting-control">
         <input type="text" placeholder="1,2,3-5" v-model="parameter.pageRanges" :disabled="converting" class="text-input">
@@ -585,8 +586,13 @@ watch(
       </div>
     </template>
 
+    <div v-if="hasAiLayout" class="setting-row-switch" :class="{ 'markdown-order-11': isMarkdown }">
+      <div class="setting-label">{{ t('pdfToolDetail.upload.settings.aiLayoutAnalysis') }}:</div>
+      <label class="switch"><input type="checkbox" v-model="parameter.enableAiLayout" true-value="1" false-value="0" :disabled="converting"><span class="track"></span></label>
+    </div>
+
     <!-- 29. Include images -->
-    <div v-if="hasContainImg" class="setting-row-switch">
+    <div v-if="hasContainImg" class="setting-row-switch" :class="{ 'markdown-order-6': isMarkdown }">
       <div class="setting-label">
         {{ t('pdfToolDetail.upload.settings.includeImages') }}<Tooltip>
           <TooltipTrigger as-child>
@@ -599,7 +605,7 @@ watch(
     </div>
 
     <!-- 30. Include annotations -->
-    <div v-if="hasContainAnnotation" class="setting-row-switch">
+    <div v-if="hasContainAnnotation" class="setting-row-switch" :class="{ 'markdown-order-7': isMarkdown }">
       <div class="setting-label">
         {{ t('pdfToolDetail.upload.settings.includeAnnotations') }}<Tooltip>
           <TooltipTrigger as-child>
@@ -612,7 +618,7 @@ watch(
     </div>
 
     <!-- 31. Formula to image -->
-    <div v-if="hasFormulaToImage" class="setting-row-switch">
+    <div v-if="hasFormulaToImage" class="setting-row-switch" :class="{ 'markdown-order-9': isMarkdown }">
       <div class="setting-label">
         {{ t('pdfToolDetail.upload.settings.formulaToImage') }}<Tooltip>
           <TooltipTrigger as-child>
@@ -625,13 +631,13 @@ watch(
     </div>
 
     <!-- 34. Page output (one doc per page) -->
-    <div v-if="hasPageOneOutput" class="setting-row-switch">
+    <div v-if="hasPageOneOutput" class="setting-row-switch" :class="{ 'markdown-order-10': isMarkdown }">
       <div class="setting-label">{{ t('pdfToolDetail.upload.settings.pageOutput') }}:</div>
       <label class="switch"><input type="checkbox" v-model="parameter.isOutputDocumentPerPage" true-value="1" false-value="0" :disabled="converting"><span class="track"></span></label>
     </div>
 
     <!-- 35. Retain background -->
-    <div v-if="hasRetainBgImg" class="setting-row-switch">
+    <div v-if="hasRetainBgImg" class="setting-row-switch" :class="{ 'markdown-order-8': isMarkdown }">
       <div class="setting-label" :class="{ dim: ocrLabelDim }">
         {{ t('pdfToolDetail.upload.settings.retainBackground') }}<Tooltip>
           <TooltipTrigger as-child>
@@ -663,7 +669,7 @@ watch(
     </div>
 
     <!-- 38. Allow OCR -->
-    <div v-if="hasAllowOcr" class="setting-row-switch">
+    <div v-if="hasAllowOcr" class="setting-row-switch" :class="{ 'markdown-order-3': isMarkdown }">
       <div class="setting-label">
         {{ t('pdfToolDetail.upload.settings.allowOcr') }}<Tooltip>
           <TooltipTrigger as-child>
@@ -676,7 +682,7 @@ watch(
     </div>
 
     <!-- 38.1 OCR language -->
-    <div v-if="hasOcrSettings" class="setting-row">
+    <div v-if="hasOcrSettings" class="setting-row" :class="{ 'markdown-order-4': isMarkdown }">
       <div class="setting-label" :class="{ dim: ocrLabelDim }">{{ t('pdfToolDetail.upload.settings.ocrLanguage') }}:</div>
       <div class="setting-control">
         <Select v-model="parameter.ocrRecognitionLang" :disabled="ocrDisabled">
@@ -691,7 +697,7 @@ watch(
     </div>
 
     <!-- 38.2 OCR range -->
-    <div v-if="hasOcrSettings" class="setting-row">
+    <div v-if="hasOcrSettings" class="setting-row" :class="{ 'markdown-order-5': isMarkdown }">
       <div class="setting-label" :class="{ dim: ocrLabelDim }">{{ t('pdfToolDetail.upload.settings.ocrRange') }}:</div>
       <div class="setting-control">
         <Select v-model="parameter.ocrOption" :disabled="ocrDisabled">
@@ -712,7 +718,7 @@ watch(
     </div>
 
     <!-- 40. PDF password -->
-    <div v-if="hasPassword && !hasSplitOptions" class="setting-row">
+    <div v-if="hasPassword && !hasSplitOptions" class="setting-row" :class="{ 'markdown-order-1': isMarkdown }">
       <div class="setting-label">{{ t('pdfToolDetail.upload.settings.password') }}:</div>
       <div class="setting-control">
         <input type="text" v-model="password" :disabled="converting" class="text-input">
@@ -799,6 +805,21 @@ watch(
 .file-card-form {
   max-width: 100%;
 }
+.markdown-form {
+  display: flex;
+  flex-direction: column;
+}
+.markdown-form .markdown-order-1 { order: 1; }
+.markdown-form .markdown-order-2 { order: 2; }
+.markdown-form .markdown-order-3 { order: 3; }
+.markdown-form .markdown-order-4 { order: 4; }
+.markdown-form .markdown-order-5 { order: 5; }
+.markdown-form .markdown-order-6 { order: 6; }
+.markdown-form .markdown-order-7 { order: 7; }
+.markdown-form .markdown-order-8 { order: 8; }
+.markdown-form .markdown-order-9 { order: 9; }
+.markdown-form .markdown-order-10 { order: 10; }
+.markdown-form .markdown-order-11 { order: 11; }
 
 .setting-row,
 .setting-row-switch {
@@ -1223,6 +1244,28 @@ watch(
 @media (max-width: 768px) {
   .setting-label {
     flex-basis: 120px;
+  }
+  .markdown-form .setting-row {
+    flex-direction: column;
+    align-items: stretch;
+    row-gap: 6px;
+    column-gap: 0;
+  }
+  .markdown-form .setting-row .setting-label {
+    flex: none;
+    width: 100%;
+  }
+  .markdown-form .setting-row .setting-control,
+  .markdown-form .text-input,
+  .markdown-form .select-input {
+    width: 100%;
+  }
+  .markdown-form .setting-row-switch {
+    justify-content: space-between;
+    column-gap: 16px;
+  }
+  .markdown-form .setting-row-switch .setting-label {
+    flex: 1 1 auto;
   }
   .perm-grid {
     grid-template-columns: 1fr;

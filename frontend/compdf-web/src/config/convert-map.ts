@@ -1,11 +1,11 @@
 /**
- * The 38-tool catalog + slug→endpoint mapping. Authoritative for both the
+ * The 39-tool catalog + slug→endpoint mapping. Authoritative for both the
  * catalog page (TOOL_SECTIONS) and the detail page (resolveTool).
  *
  * Three server route families:
  *   pdf            → POST /api/v1/process/pdf/{op}, multipart `request` JSON part + file(s)
  *   convert-target → POST /api/v1/process/pdf/{target}
- *   convert-type   → POST /api/v1/process/{source}/{target} (img/*, pdf/pdf, pdf/ofd, img/json)
+ *   convert-type   → POST /api/v1/process/{source}/{target} (img/*, pdf/pdf, pdf/ofd, pdf/markdown, img/json)
  *   convert-to-pdf → POST /api/v1/process/{source}/pdf
  *
  * Tool/section titles are i18n-driven (see i18n-keys.ts: toolI18nKey(slug),
@@ -52,6 +52,7 @@ const ALL: ToolDef[] = [
   { slug: 'pdf-to-rtf', icon: 'pdf_to_rtf', accept: '.pdf', endpoint: { kind: 'convert-target', target: 'rtf' } },
   { slug: 'pdf-to-editable', icon: 'pdf_to_editable', accept: '.pdf', endpoint: { kind: 'convert-type', type: 'pdf/pdf' } },
   { slug: 'pdf-to-ofd', icon: 'pdf_to_ofd', accept: '.pdf', endpoint: { kind: 'convert-type', type: 'pdf/ofd' } },
+  { slug: 'pdf-to-markdown', icon: 'pdf_to_markdown', accept: '.pdf', endpoint: { kind: 'convert-type', type: 'pdf/markdown' } },
 
   // Other formats to PDF.
   { slug: 'word-to-pdf', icon: 'word_to_pdf', accept: '.doc,.docx', endpoint: { kind: 'convert-to-pdf', type: 'docx/pdf' } },
@@ -130,7 +131,7 @@ export function resolveConversionTypes(tool: ToolDef): { fromType: string; toTyp
     case 'convert-type': {
       const [src, dst] = ep.type.split('/');
       if (src === 'pdf') {
-        // pdf/pdf → searchablePdf (OCR layer); pdf/ofd → ofd.
+        // pdf/pdf → searchablePdf (OCR layer); other pdf/* values map directly.
         return { fromType: 'pdf', toType: dst === 'pdf' ? 'searchablePdf' : dst };
       }
       // img/* → fromType='img', toType = part after 'img/'.

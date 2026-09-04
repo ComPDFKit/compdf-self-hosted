@@ -18,7 +18,7 @@
  */
 
 export interface ConversionFeatures {
-  flowLayout?: boolean; includeImages?: boolean; includeAnnotations?: boolean;
+  flowLayout?: boolean; aiLayout?: boolean; includeImages?: boolean; includeAnnotations?: boolean;
   formulaToImage?: boolean; allowOcr?: boolean;
   ocrSettings?: boolean;
   pageOneOutput?: boolean; retainBgImg?: boolean; imageFormat?: boolean; excelOptions?: boolean;
@@ -30,6 +30,7 @@ export interface ConversionFeatures {
 export const CONVERSION_FEATURES: Record<string, ConversionFeatures> = {
   'pdf/docx': { flowLayout: true, includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, retainBgImg: true, pageRange: true, password: true },
   'pdf/ofd': { password: true, allowOcr: true, ocrSettings: true, includeImages: true, includeAnnotations: true, pageRange: true, pageOneOutput: true },
+  'pdf/markdown': { aiLayout: true, includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, retainBgImg: true, pageRange: true, password: true },
   'pdf/xlsx': { includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, excelOptions: true, pageRange: true, password: true },
   'pdf/pptx': { includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, retainBgImg: true, pageRange: true, password: true },
   'pdf/html': { htmlOption: true, includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, pageRange: true, password: true },
@@ -278,7 +279,7 @@ function buildConversionPayload(input: BuildRequestInput): Record<string, unknow
     payload[key] = value;
   };
 
-  set('enableAiLayout', !!features.flowLayout);
+  set('enableAiLayout', !!features.flowLayout || !!features.aiLayout);
   set('pageLayoutMode', !!features.flowLayout);
   set('isContainImg', !!features.includeImages);
   set('isContainAnnot', !!features.includeAnnotations);
