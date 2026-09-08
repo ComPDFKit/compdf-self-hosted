@@ -137,7 +137,7 @@ const PDF_NUMERIC_KEYS: Readonly<Record<number, string>> = {
   120103: 'certificatePasswordInvalid',
   120104: 'certificateInvalid',
   120201: 'iccProfileRequired',
-  120202: 'iccProfileRequired',
+  120202: 'iccProfileInvalid',
   130001: 'unsupportedOperation',
   130002: 'unsupportedEnumValue',
   130101: 'signatureNotFound',

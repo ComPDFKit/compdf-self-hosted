@@ -89,6 +89,7 @@ const file = ref<FileState | null>(null);
 const input = ref<HTMLInputElement | null>(null);
 const watermarkImageInput = ref<HTMLInputElement | null>(null);
 const insertTargetInput = ref<HTMLInputElement | null>(null);
+const iccProfileInput = ref<HTMLInputElement | null>(null);
 
 const parameter = ref<UploadParameter>(defaultParameter());
 const password = ref('');
@@ -105,6 +106,7 @@ const settingsOpen = ref(false);
 
 const insertTargetFile = ref<File | null>(null);
 const watermarkImageFile = ref<File | null>(null);
+const iccProfileFile = ref<File | null>(null);
 
 // the most recent blob response — kept so the success-card "Download File"
 // button can re-trigger the download without re-uploading.
@@ -141,14 +143,17 @@ const PDF_ACTION_PROGRESS_KEYS: Record<string, string> = {
 };
 
 const convertButtonLabel = computed(() => (
-  props.endpoint.kind === 'pdf' ? t(toolI18nKey(props.toolSlug)) : t('pdfToolDetail.upload.convert')
+  props.endpoint.kind === 'pdf' && props.toType !== 'pdfa'
+    ? t(toolI18nKey(props.toolSlug))
+    : t('pdfToolDetail.upload.convert')
 ));
 
 const actionInProgressText = computed(() => (
   t(PDF_ACTION_PROGRESS_KEYS[props.toolSlug] ?? 'pdfToolDetail.upload.convertingAction')
 ));
 
-const canSelectMultiple = computed(() => props.mode === 'multiple');
+const isPdfStandardTool = computed(() => props.toType === 'pdfa');
+const canSelectMultiple = computed(() => props.mode === 'multiple' && !isPdfStandardTool.value);
 const isSplitTool = computed(() => props.toType === 'split');
 const isTaskRunning = computed(() => Converting.value || file.value?.status === 'uploading');
 
@@ -195,6 +200,9 @@ function matchesAccept(accept: string, ext: string): boolean {
  * a dropped file can't bypass the size / extension / merge-limit checks.
  */
 function validateSelection(fileArray: File[]): string | null {
+  if (isPdfStandardTool.value && fileArray.length > 1) {
+    return 'pdfToolDetail.upload.errors.pdfaFileLimit';
+  }
   if (props.endpoint.kind === 'pdf' && fileArray.some((f) => !f.name.toLowerCase().endsWith('.pdf'))) {
     return 'pdfToolDetail.upload.errors.invalidPdf';
   }
@@ -332,6 +340,10 @@ function handleConvert(val: boolean) {
     errorText.value = t('pdfToolDetail.upload.errors.insertFileCount');
     return;
   }
+  if (props.toType === 'pdfa' && !iccProfileFile.value) {
+    errorText.value = t('pdfToolDetail.upload.errors.iccProfileRequired');
+    return;
+  }
   if (props.mode === 'multiple') {
     if (val) {
       void upload(file.value.raw);
@@ -386,8 +398,7 @@ async function upload(rawFile: File) {
   if (!file.value) return;
   if (input.value) input.value.value = '';
 
-  // primary file list — insertTargetFile/watermarkImageFile travel via
-  // buildRequest's extraFiles/imageFile, NOT in this list.
+  // Operation-specific secondary files are not included in this primary list.
   let uploadFileList: File[];
   if (props.toType === 'merge') {
     uploadFileList = file.value.rawFiles ?? [rawFile];
@@ -420,6 +431,9 @@ async function upload(rawFile: File) {
     } else if (pdfOp === 'watermark/add') {
       fd.append('file', uploadFileList[0]);
       if (r.imageFile) fd.append('imageFile', r.imageFile);
+    } else if (pdfOp === 'pdfa') {
+      fd.append('file', uploadFileList[0]);
+      if (iccProfileFile.value) fd.append('iccFile', iccProfileFile.value);
     } else {
       fd.append('file', uploadFileList[0]);
     }
@@ -495,11 +509,13 @@ function init() {
   isCsvMerge.value = '0';
   watermarkImageFile.value = null;
   insertTargetFile.value = null;
+  iccProfileFile.value = null;
   if (watermarkImageInput.value) watermarkImageInput.value.value = '';
   if (insertTargetInput.value) insertTargetInput.value.value = '';
+  if (iccProfileInput.value) iccProfileInput.value.value = '';
 }
 
-// hidden-input handlers for the watermark image + insert target file. These
+// Hidden-input handlers for operation-specific secondary files. These
 // inputs live here because UploadPanel owns the refs upload() needs; ParamForm
 // triggers their .click() and receives the selected filename through v-models.
 function handleWatermarkImageChange(e: Event) {
@@ -528,6 +544,26 @@ function handleInsertTargetChange(e: Event) {
   errorText.value = '';
   insertTargetFile.value = selected;
   target.value = '';
+}
+
+function handleIccProfileChange(e: Event) {
+  const target = e.target as HTMLInputElement;
+  const selected = target.files?.[0];
+  if (selected) setIccProfile(selected);
+  target.value = '';
+}
+
+function handleIccProfileDrop(selected: File) {
+  setIccProfile(selected);
+}
+
+function setIccProfile(selected: File) {
+  if (!/\.(icc|icm)$/i.test(selected.name)) {
+    errorText.value = t('pdfToolDetail.upload.errors.invalidIccProfile');
+    return;
+  }
+  errorText.value = '';
+  iccProfileFile.value = selected;
 }
 
 /**
@@ -656,12 +692,15 @@ function fallbackFilename(): string {
             v-model:is-csv-merge="isCsvMerge"
             v-model:watermark-image-file="watermarkImageFile"
             v-model:insert-target-file="insertTargetFile"
+            v-model:icc-profile-file="iccProfileFile"
             :from-type="fromType"
             :to-type="toType"
             :files="selectedFiles"
             :converting="Converting"
             @pick-watermark-image="watermarkImageInput?.click()"
             @pick-insert-target="insertTargetInput?.click()"
+            @pick-icc-profile="iccProfileInput?.click()"
+            @drop-icc-profile="handleIccProfileDrop"
             @delete-merge-file="handleMergeFileDelete"
             @delete-file="handleDelete"
           />
@@ -776,6 +815,13 @@ function fallbackFilename(): string {
       type="file"
       accept=".pdf"
       @change="handleInsertTargetChange"
+    />
+    <input
+      ref="iccProfileInput"
+      class="upload-input"
+      type="file"
+      accept=".icc,.icm"
+      @change="handleIccProfileChange"
     />
   </div>
 </template>

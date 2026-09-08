@@ -52,7 +52,7 @@ ComPDF Self-Hosted 提供可直接在瀏覽器中使用的**開源 PDF 編輯器
 | 類別  | 功能  |
 | --- | --- |
 | PDF 編輯 | 合併 PDF、分割 PDF、旋轉 PDF、插入頁面、刪除頁面、擷取頁面、新增浮水印、移除浮水印、加密 PDF、解密 PDF |
-| PDF 轉其他格式 | PDF 轉 Word、PDF 轉 Excel、PDF 轉 Slide、PDF 轉 Image（PNG、JPG、JPEG、JPEG2000、BMP、TIFF、TGA、GIF、WEBP）、PDF 轉 HTML、PDF 轉 TXT、PDF 轉 CSV、PDF 轉 RTF、PDF 轉 JSON、PDF 轉 Searchable PDF、PDF 轉 OFD、PDF 轉 Markdown |
+| PDF 轉其他格式 | PDF 轉 Word、PDF 轉 Excel、PDF 轉 Slide、PDF 轉 Image（PNG、JPG、JPEG、JPEG2000、BMP、TIFF、TGA、GIF、WEBP）、PDF 轉 HTML、PDF 轉 TXT、PDF 轉 CSV、PDF 轉 RTF、PDF 轉 JSON、PDF 轉 Searchable PDF、PDF 轉 OFD、PDF 轉 Markdown、PDF 轉 PDF/A |
 | 其他格式轉 PDF | Word 轉 PDF、Excel 轉 PDF、Slide 轉 PDF、HTML 轉 PDF、TXT 轉 PDF、CSV 轉 PDF、RTF 轉 PDF、PNG 轉 PDF |
 | 圖片轉其他格式 | 圖片轉 Word、圖片轉 Excel、圖片轉 Slide、圖片轉 HTML、圖片轉 CSV、圖片轉 TXT、圖片轉 RTF、圖片轉 JSON、圖片轉 PDF |
 

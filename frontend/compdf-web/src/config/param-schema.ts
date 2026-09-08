@@ -25,6 +25,7 @@ export interface ConversionFeatures {
   imgDpi?: boolean; pageRange?: boolean; mergeCsv?: boolean; htmlOption?: boolean;
   jsonContent?: boolean; password?: boolean; transparentText?: boolean; rotateAngle?: boolean;
   insertOptions?: boolean; watermarkOptions?: boolean; removeWatermarkOptions?: boolean; encryptOptions?: boolean;
+  standardOptions?: boolean;
 }
 
 export const CONVERSION_FEATURES: Record<string, ConversionFeatures> = {
@@ -52,13 +53,14 @@ export const CONVERSION_FEATURES: Record<string, ConversionFeatures> = {
   'pdf/removeWatermark': { pageRange: true, password: true, removeWatermarkOptions: true },
   'pdf/encrypt': { encryptOptions: true },
   'pdf/decrypt': { password: true },
+  'pdf/pdfa': { password: true, standardOptions: true },
   'docx/pdf': {}, 'xlsx/pdf': {}, 'pptx/pdf': {}, 'html/pdf': {}, 'png/pdf': {}, 'txt/pdf': {}, 'csv/pdf': {}, 'rtf/pdf': {},
   'img/docx': { allowOcr: true }, 'img/xlsx': { allowOcr: true }, 'img/pptx': { allowOcr: true },
   'img/pdf': { allowOcr: true }, 'img/txt': { allowOcr: true }, 'img/json': { allowOcr: true },
   'img/html': { allowOcr: true }, 'img/rtf': { allowOcr: true }, 'img/csv': { allowOcr: true },
 };
 
-const PDF_EDIT_TO_TYPES = ['merge','split','insert','delete','rotate','compress','addWatermark','removeWatermark','encrypt','decrypt'];
+const PDF_EDIT_TO_TYPES = ['merge','split','insert','delete','rotate','compress','addWatermark','removeWatermark','encrypt','decrypt','pdfa'];
 
 const ENCRYPT_PERMISSION_KEYS = ['allowPrint','allowCopy','allowDocumentChanges','allowDocumentAssembly','allowCommenting','allowFormFieldEntry'];
 
@@ -72,6 +74,9 @@ export const COMPRESS_PRESET_FLAGS: Record<'low' | 'medium' | 'high', string[]> 
 export interface UploadParameter {
   pageRanges: string;
   outputFileName: string;
+  outputTitle: string;
+  outputLanguage: string;
+  pdfStandard: string;
   imgDpi: number;
   rotateAngle: string;
   insertActionType: 'BLANK' | 'FROM_PDF';
@@ -116,7 +121,7 @@ export interface UploadParameter {
 
 export function defaultParameter(): UploadParameter {
   return {
-    pageRanges: '', outputFileName: '', imgDpi: 144, rotateAngle: '90',
+    pageRanges: '', outputFileName: '', outputTitle: '', outputLanguage: 'unspecified', pdfStandard: 'pdfa1a', imgDpi: 144, rotateAngle: '90',
     insertActionType: 'BLANK', insertIndex: '1', insertCount: '1', insertWidth: '595', insertHeight: '842', insertTargetPassword: '', sourcePages: '',
     compressQuality: 'medium', compressCustomFlags: [], compressImageQuality: '80',
     watermarkType: 'text', watermarkFullScreen: false,
@@ -259,6 +264,16 @@ function buildPdfEditPayload(input: BuildRequestInput): { payload: Record<string
     return { payload: result };
   }
   if (toType === 'decrypt') { const result: Record<string, unknown> = { outputFileName }; setIfFilled(result, 'password', password); return { payload: result }; }
+  if (toType === 'pdfa') {
+    return { payload: {
+      standard: parameter.pdfStandard,
+      outputFileName,
+      uaConfig: {
+        title: parameter.outputTitle,
+        language: parameter.outputLanguage,
+      },
+    } };
+  }
   return { payload: { pages: pageRanges, outputFileName } };
 }
 

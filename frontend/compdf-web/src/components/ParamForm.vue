@@ -14,9 +14,9 @@
  *   el-checkbox group       → individual <input type="checkbox"> bound to array membership
  *   el-tooltip              → CSS tooltip on a (?) marker
  *
- * File pickers (watermark image / insert target): UploadPanel owns the hidden
+ * File pickers (watermark image / insert target / ICC profile): UploadPanel owns the hidden
  * <input type=file> elements + the upload() FormData assembly. ParamForm EMITS
- * pick-watermark-image / pick-insert-target requests and receives the picked
+ * pick-watermark-image / pick-insert-target / pick-icc-profile requests and receives the picked
  * File back as a v-model to render the filename + allow clearing. This keeps
  * the file refs where buildRequest consumes them (UploadPanel) and avoids
  * threading template refs across the component boundary.
@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/tooltip';
 import DeleteIcon from '@/assets/icons/ui/delete.svg?component';
 import PdfIcon from '@/assets/icons/ui/pdf.svg?component';
+import IccUploadIcon from '@/assets/icons/ui/icc-upload.svg?component';
 
 const props = defineProps<{
   fromType: string;
@@ -55,17 +56,20 @@ const password = defineModel<string>('password', { required: true });
 const isCsvMerge = defineModel<string>('isCsvMerge', { required: true });
 const watermarkImageFile = defineModel<File | null>('watermarkImageFile', { default: null });
 const insertTargetFile = defineModel<File | null>('insertTargetFile', { default: null });
+const iccProfileFile = defineModel<File | null>('iccProfileFile', { default: null });
 
 const emit = defineEmits<{
   (e: 'pick-watermark-image'): void;
   (e: 'pick-insert-target'): void;
+  (e: 'pick-icc-profile'): void;
+  (e: 'drop-icc-profile', file: File): void;
   /** Per-file delete in the merge list — UploadPanel owns rawFiles, so it handles the splice. */
   (e: 'delete-merge-file', index: number): void;
   /** Single-file tools such as split use a parameter card with its own delete affordance. */
   (e: 'delete-file'): void;
 }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const converting = computed(() => props.converting ?? false);
 
@@ -108,6 +112,7 @@ const hasRotateAngle = computed(() => !!features.value.rotateAngle);
 const hasInsertOptions = computed(() => !!features.value.insertOptions);
 const hasWatermarkOptions = computed(() => !!features.value.watermarkOptions);
 const hasEncryptOptions = computed(() => !!features.value.encryptOptions);
+const hasStandardOptions = computed(() => !!features.value.standardOptions);
 // These three gate on toType, not on a features flag.
 const hasCompressOptions = computed(() => props.toType === 'compress');
 const hasMergeOptions = computed(() => props.toType === 'merge');
@@ -140,6 +145,36 @@ const ocrLanguages = [
   'ESLAV',
 ];
 const ocrOptions = ['ALL', 'SCAN_PAGE', 'INVALID_CHARACTER', 'INVALID_CHARACTER_AND_SCAN_PAGE'];
+const pdfStandards = [
+  { value: 'pdfa1a', label: 'PDF/A-1a' },
+  { value: 'pdfa1b', label: 'PDF/A-1b' },
+  { value: 'pdfa2a', label: 'PDF/A-2a' },
+  { value: 'pdfa2u', label: 'PDF/A-2u' },
+  { value: 'pdfa2b', label: 'PDF/A-2b' },
+  { value: 'pdfx4', label: 'PDF/X-4' },
+  { value: 'pdfe1', label: 'PDF/E-1' },
+  { value: 'pdfua1', label: 'PDF/UA-1' },
+];
+const outputLanguages = [
+  'unspecified', 'cs_CZ', 'de_DE', 'en_GB', 'en_US', 'es_ES', 'fi_FI', 'fr_FR',
+  'hu_HU', 'it_IT', 'ja_JP', 'ko_KR', 'nl_BE', 'nl_NL', 'no_NO', 'pl_PL',
+  'pt_BR', 'pt_PT', 'ru_RU', 'sk_SK', 'sv_SE', 'tr_TR', 'zh_CN', 'zh_TW', 'zh_HK', 'zh_MO',
+];
+
+function outputLanguageLabel(value: string): string {
+  if (value === 'unspecified') return t('pdfToolDetail.upload.settings.languageUnspecified');
+  const [languageCode, regionCode] = value.split('_');
+  const displayLocale = locale.value.replace('_', '-');
+  try {
+    const languageName = new Intl.DisplayNames([displayLocale], { type: 'language' }).of(languageCode) ?? languageCode;
+    const regionName = regionCode
+      ? new Intl.DisplayNames([displayLocale], { type: 'region' }).of(regionCode) ?? regionCode
+      : '';
+    return regionName ? `${languageName} (${regionName})` : languageName;
+  } catch {
+    return value;
+  }
+}
 
 // compress flag groups + presets
 const compressFlagGroups: Array<{ titleKey: string; items: Array<{ labelKey: string; flags: string[] }> }> = [
@@ -213,10 +248,20 @@ function pickWatermarkImage() {
 function pickInsertTarget() {
   emit('pick-insert-target');
 }
+function pickIccProfile() {
+  emit('pick-icc-profile');
+}
+function dropIccProfile(event: DragEvent) {
+  const selected = event.dataTransfer?.files?.[0];
+  if (selected) emit('drop-icc-profile', selected);
+}
 function clearInsertTarget() {
   // UploadPanel clears the hidden input's value after each pick, so nulling the
   // model is enough to reset the UI + buildRequest's insertTargetFile.
   insertTargetFile.value = null;
+}
+function clearIccProfile() {
+  iccProfileFile.value = null;
 }
 
 function deleteMergeFile(index: number) {
@@ -287,7 +332,78 @@ watch(
 
 <template>
   <TooltipProvider :delay-duration="100">
-  <div class="param-form" :class="{ 'file-card-form': hasSplitOptions || hasMergeOptions, 'markdown-form': isMarkdown }">
+  <div class="param-form" :class="{ 'file-card-form': hasSplitOptions || hasMergeOptions, 'markdown-form': isMarkdown, 'standard-form': hasStandardOptions }">
+    <template v-if="hasStandardOptions">
+      <div class="setting-row">
+        <div class="setting-label">{{ t('pdfToolDetail.upload.settings.password') }}:</div>
+        <div class="setting-control">
+          <input type="password" v-model="password" :disabled="converting" class="text-input">
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">{{ t('pdfToolDetail.upload.settings.pdfStandard') }}:</div>
+        <div class="setting-control">
+          <Select v-model="parameter.pdfStandard" :disabled="converting">
+            <SelectTrigger class="select-input"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="standard in pdfStandards" :key="standard.value" :value="standard.value">{{ standard.label }}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">{{ t('pdfToolDetail.upload.settings.outputTitle') }}:</div>
+        <div class="setting-control">
+          <input type="text" v-model="parameter.outputTitle" :disabled="converting" class="text-input">
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">{{ t('pdfToolDetail.upload.settings.outputLanguage') }}:</div>
+        <div class="setting-control">
+          <Select v-model="parameter.outputLanguage" :disabled="converting">
+            <SelectTrigger class="select-input"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="language in outputLanguages" :key="language" :value="language">
+                {{ outputLanguageLabel(language) }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">{{ t('pdfToolDetail.upload.settings.outputFileName') }}:</div>
+        <div class="setting-control">
+          <input type="text" v-model="parameter.outputFileName" placeholder="standard.pdf" :disabled="converting" class="text-input">
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">{{ t('pdfToolDetail.upload.settings.iccProfile') }}:</div>
+        <div class="setting-control icc-profile-control">
+          <button
+            type="button"
+            class="icc-dropzone"
+            :disabled="converting"
+            @click="pickIccProfile"
+            @dragover.prevent
+            @drop.prevent="dropIccProfile"
+          >
+            <IccUploadIcon class="icc-dropzone-icon" aria-hidden="true" />
+            <span v-if="iccProfileFile" class="icc-dropzone-name">{{ iccProfileFile.name }}</span>
+            <span v-else class="icc-dropzone-copy">{{ t('pdfToolDetail.upload.settings.selectIccProfile') }}</span>
+          </button>
+          <button
+            v-if="iccProfileFile"
+            type="button"
+            class="icc-clear"
+            :title="t('pdfToolDetail.upload.startOver')"
+            :aria-label="t('pdfToolDetail.upload.startOver')"
+            :disabled="converting"
+            @click="clearIccProfile"
+          ><DeleteIcon /></button>
+        </div>
+      </div>
+    </template>
+
     <!-- 1. HTML output option -->
     <div v-if="hasHtmlOption" class="setting-row">
       <div class="setting-label">{{ t('pdfToolDetail.upload.settings.htmlFileOptions') }}:</div>
@@ -718,7 +834,7 @@ watch(
     </div>
 
     <!-- 40. PDF password -->
-    <div v-if="hasPassword && !hasSplitOptions" class="setting-row" :class="{ 'markdown-order-1': isMarkdown }">
+    <div v-if="hasPassword && !hasSplitOptions && !hasStandardOptions" class="setting-row" :class="{ 'markdown-order-1': isMarkdown }">
       <div class="setting-label">{{ t('pdfToolDetail.upload.settings.password') }}:</div>
       <div class="setting-control">
         <input type="text" v-model="password" :disabled="converting" class="text-input">
@@ -802,6 +918,65 @@ watch(
   margin: 0;
   text-align: left;
 }
+.icc-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  height: 140px;
+  padding: 25px;
+  border: 1px dashed #d6dce9;
+  border-radius: 4px;
+  background: #fff;
+  color: #618cfb;
+  cursor: pointer;
+}
+.icc-dropzone:hover:not(:disabled) {
+  border-color: #618cfb;
+  background: #f8faff;
+}
+.icc-dropzone:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.icc-dropzone-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+.icc-dropzone-name {
+  color: #151722;
+  font-size: 14px;
+  word-break: break-all;
+}
+.icc-dropzone-copy {
+  color: #304466;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: center;
+}
+.icc-clear {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: #f1f4ff;
+  color: #2e59ca;
+  cursor: pointer;
+}
+.icc-clear svg {
+  width: 16px;
+  height: 16px;
+}
 .file-card-form {
   max-width: 100%;
 }
@@ -842,6 +1017,11 @@ watch(
 .setting-control {
   flex: 0 1 auto;
   min-width: 0;
+}
+.icc-profile-control {
+  position: relative;
+  width: 320px;
+  max-width: 100%;
 }
 
 /* inputs */
@@ -1242,6 +1422,21 @@ watch(
 }
 
 @media (max-width: 768px) {
+  .standard-form .setting-row {
+    flex-direction: column;
+    align-items: stretch;
+    row-gap: 6px;
+    column-gap: 0;
+  }
+  .standard-form .setting-row .setting-label,
+  .standard-form .setting-row .setting-control,
+  .standard-form .text-input,
+  .standard-form .select-input {
+    width: 100%;
+  }
+  .standard-form .setting-row .setting-label {
+    flex: none;
+  }
   .setting-label {
     flex-basis: 120px;
   }

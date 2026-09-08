@@ -192,12 +192,12 @@ export class PdfController {
     ]),
   )
   async pdfa(
-    @UploadedFiles() files: { file?: MulterFile[]; iccFile?: MulterFile[] },
+    @UploadedFiles() files: { file?: MulterFile[]; iccFile?: MulterFile[] } | undefined,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
-    const file = requireFile(files.file?.[0], 'file');
-    const iccFile = requireFile(files.iccFile?.[0], 'iccFile');
+    const file = requireFile(files?.file?.[0], 'file');
+    const iccFile = requireFile(files?.iccFile?.[0], 'iccFile');
     // PDF/A, PDF/X, PDF/E, PDF/UA — the SDK's standards/convert endpoint.
     const request = extractRequest(req.body);
     this.logIncoming('pdfa', request, [file, iccFile]);

@@ -1,5 +1,5 @@
 /**
- * The 39-tool catalog + slug→endpoint mapping. Authoritative for both the
+ * The 40-tool catalog + slug→endpoint mapping. Authoritative for both the
  * catalog page (TOOL_SECTIONS) and the detail page (resolveTool).
  *
  * Three server route families:
@@ -17,7 +17,7 @@
 export type PdfOp =
   | 'merge' | 'split' | 'insert-from-pdf' | 'insert-blank'
   | 'delete' | 'rotate' | 'compress'
-  | 'watermark/add' | 'watermark/remove' | 'encrypt' | 'decrypt';
+  | 'watermark/add' | 'watermark/remove' | 'encrypt' | 'decrypt' | 'pdfa';
 
 export type Endpoint =
   | { kind: 'pdf'; op: PdfOp }
@@ -53,6 +53,7 @@ const ALL: ToolDef[] = [
   { slug: 'pdf-to-editable', icon: 'pdf_to_editable', accept: '.pdf', endpoint: { kind: 'convert-type', type: 'pdf/pdf' } },
   { slug: 'pdf-to-ofd', icon: 'pdf_to_ofd', accept: '.pdf', endpoint: { kind: 'convert-type', type: 'pdf/ofd' } },
   { slug: 'pdf-to-markdown', icon: 'pdf_to_markdown', accept: '.pdf', endpoint: { kind: 'convert-type', type: 'pdf/markdown' } },
+  { slug: 'pdf-to-standard', icon: 'pdf_to_standard', accept: '.pdf', endpoint: { kind: 'pdf', op: 'pdfa' } },
 
   // Other formats to PDF.
   { slug: 'word-to-pdf', icon: 'word_to_pdf', accept: '.doc,.docx', endpoint: { kind: 'convert-to-pdf', type: 'docx/pdf' } },

@@ -40,6 +40,7 @@ const SLUG_TO_TOOL_KEY: Record<string, string> = {
   'pdf-to-editable': 'pdfToSearchablePdf',
   'pdf-to-ofd': 'pdfToOfd',
   'pdf-to-markdown': 'pdfToMarkdown',
+  'pdf-to-standard': 'pdfToStandard',
   'word-to-pdf': 'wordToPdf',
   'png-to-pdf': 'pngToPdf',
   'rtf-to-pdf': 'rtfToPdf',
