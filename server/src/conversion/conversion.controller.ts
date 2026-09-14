@@ -35,6 +35,7 @@ import { ConvertTarget, DocumentAiOperation } from '../clients/conversion.client
 import { ErrorCode } from '../common/errors/error-codes';
 import { contentDispositionAttachment, normalizeUploadedFilename, sanitizeFilename } from '../common/utils/filename';
 import { ConversionService } from './conversion.service';
+import { validatePdfImageOptions } from './dpi-validation';
 
 type MulterFile = Express.Multer.File;
 type ProcessConversionRoute =
@@ -104,6 +105,9 @@ export class ConversionController {
       throw new BadRequestException({ code: ErrorCode.BAD_REQUEST, message: 'missing required field: target or type' });
     }
     const options = parseOptions(req.body);
+    if (target === 'png' || type === 'pdf/png') {
+      validatePdfImageOptions(options);
+    }
     const password = stringField(req.body, 'password');
     this.logger.log(`conversion convert request ${JSON.stringify({
       route: 'conversion/convert',
@@ -145,6 +149,9 @@ export class ConversionController {
       throw new BadRequestException({ code: ErrorCode.BAD_REQUEST, message: `unsupported process path: ${key}` });
     }
     const options = parseOptions(req.body);
+    if (key === 'pdf/png') {
+      validatePdfImageOptions(options);
+    }
     const password = stringField(req.body, 'password');
     const upload = requireFile(file);
     const token = tokenOf(req);

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { buildRequest, defaultParameter } from './param-schema';
+import {
+  buildRequest,
+  CONVERSION_FEATURES,
+  defaultParameter,
+  deletePageRangeValidationKey,
+  encryptPasswordValidationKey,
+  imageDpiValidationKey,
+  insertSourcePageRangeValidationKey,
+  watermarkValidationKey,
+} from './param-schema';
 
 const pdf = { name: 'sample.pdf' } as File;
 
@@ -27,6 +36,36 @@ describe('PDF standards request payload', () => {
       uaConfig: { title: 'Accessible report', language: 'en_US' },
       password: 'secret',
     });
+  });
+});
+
+describe('AI layout analysis', () => {
+  it.each([
+    ['pdf/docx', 'docx'],
+    ['pdf/json', 'json'],
+    ['pdf/html', 'html'],
+    ['pdf/csv', 'csv'],
+    ['pdf/xlsx', 'xlsx'],
+    ['pdf/txt', 'txt'],
+    ['pdf/pptx', 'pptx'],
+    ['pdf/png', 'png'],
+    ['pdf/rtf', 'rtf'],
+    ['pdf/searchablePdf', 'searchablePdf'],
+    ['pdf/ofd', 'ofd'],
+  ])('advertises and sends the option for %s', (featureKey, toType) => {
+    const parameter = defaultParameter();
+    parameter.enableAiLayout = '0';
+
+    const result = buildRequest({
+      fromType: 'pdf',
+      toType,
+      parameter,
+      password: '',
+      files: [pdf],
+    });
+
+    expect(CONVERSION_FEATURES[featureKey]?.aiLayout).toBe(true);
+    expect(result.payload.enableAiLayout).toBe('0');
   });
 });
 
@@ -62,4 +101,130 @@ describe('PDF to Markdown request payload', () => {
     });
     expect(result.payload).not.toHaveProperty('password');
   });
+});
+
+describe('watermark parameter validation', () => {
+  it('requires non-blank text for a text watermark', () => {
+    const parameter = defaultParameter();
+    parameter.watermarkText = '   ';
+
+    expect(watermarkValidationKey(parameter)).toBe(
+      'pdfToolDetail.upload.errors.watermarkTextRequired',
+    );
+  });
+
+  it.each([
+    ['watermarkOpacity', '1.1', 'pdfToolDetail.upload.errors.watermarkOpacityInvalid'],
+    ['watermarkFontSize', '0', 'pdfToolDetail.upload.errors.watermarkFontSizeInvalid'],
+    ['watermarkRotation', 'not-a-number', 'pdfToolDetail.upload.errors.watermarkPositionInvalid'],
+    ['watermarkHorizontalSpacing', '-1', 'pdfToolDetail.upload.errors.watermarkSpacingInvalid'],
+  ] as const)('rejects invalid %s', (field, value, expectedKey) => {
+    const parameter = defaultParameter();
+    parameter.watermarkText = 'Draft';
+    parameter[field] = value;
+
+    expect(watermarkValidationKey(parameter)).toBe(expectedKey);
+  });
+
+  it('accepts valid text watermark parameters', () => {
+    const parameter = defaultParameter();
+    parameter.watermarkText = 'Draft';
+    parameter.watermarkFontSize = '24';
+    parameter.watermarkHorizontalSpacing = '0';
+    parameter.watermarkVerticalSpacing = '12';
+
+    expect(watermarkValidationKey(parameter)).toBeNull();
+  });
+});
+
+describe('delete pages output filename', () => {
+  it('preserves a Chinese source name and adds the processing suffix', () => {
+    const parameter = defaultParameter();
+    const source = { name: '模板15(新版).pdf' } as File;
+
+    const result = buildRequest({
+      fromType: 'pdf',
+      toType: 'delete',
+      parameter,
+      password: '',
+      files: [source],
+    });
+
+    expect(result.payload.outputFileName).toBe('模板15(新版)-deleted-pages.pdf');
+  });
+
+  it('keeps an explicitly supplied output filename', () => {
+    const parameter = defaultParameter();
+    parameter.outputFileName = '最终版本.pdf';
+
+    const result = buildRequest({
+      fromType: 'pdf',
+      toType: 'delete',
+      parameter,
+      password: '',
+      files: [{ name: '模板.pdf' } as File],
+    });
+
+    expect(result.payload.outputFileName).toBe('最终版本.pdf');
+  });
+});
+
+describe('insert source page range validation', () => {
+  it.each(['', 'all', '1', '1-2', '1-2,4', '1-2;4-5'])(
+    'accepts a valid 1-based value: %s',
+    (value) => {
+      expect(insertSourcePageRangeValidationKey(value)).toBeNull();
+    },
+  );
+
+  it.each(['0', '0-1', '1-0', '3-1', '1-two'])(
+    'rejects an invalid or zero-based value: %s',
+    (value) => {
+      expect(insertSourcePageRangeValidationKey(value)).toBe(
+        'pdfToolDetail.upload.errors.insertSourcePagesInvalid',
+      );
+    },
+  );
+});
+
+describe('delete page range validation', () => {
+  it.each(['', '   '])('rejects an empty value: %o', (value) => {
+    expect(deletePageRangeValidationKey(value)).toBe(
+      'pdfToolDetail.upload.errors.deletePageRangeRequired',
+    );
+  });
+
+  it.each(['1', '1-2,4'])('accepts a non-empty value: %s', (value) => {
+    expect(deletePageRangeValidationKey(value)).toBeNull();
+  });
+});
+
+describe('encrypt password validation', () => {
+  it.each(['', '   '])('rejects an empty value: %o', (value) => {
+    expect(encryptPasswordValidationKey(value)).toBe(
+      'pdfToolDetail.upload.errors.encryptPasswordRequired',
+    );
+  });
+
+  it('accepts a non-empty password', () => {
+    expect(encryptPasswordValidationKey('secret')).toBeNull();
+  });
+});
+
+describe('PDF image DPI validation', () => {
+  it.each([71, 1501, '', 'not-a-number', Number.NaN, Number.POSITIVE_INFINITY, true, null, undefined])(
+    'rejects an invalid DPI value: %o',
+    (value) => {
+      expect(imageDpiValidationKey(value)).toBe(
+        'pdfToolDetail.upload.errors.imageDpiInvalid',
+      );
+    },
+  );
+
+  it.each([72, 300, 1500, '72', '1500'])(
+    'accepts a DPI value inside the inclusive range: %o',
+    (value) => {
+      expect(imageDpiValidationKey(value)).toBeNull();
+    },
+  );
 });

@@ -45,6 +45,19 @@ export function normalizeUploadedFilename(name: string): string {
   return filenameRepairScore(repaired) > filenameRepairScore(name) ? repaired : name;
 }
 
+export function processedFilename(
+  sourceFilename: string,
+  marker: string,
+  defaultExtension = 'pdf',
+): string {
+  const normalized = normalizeUploadedFilename(sourceFilename);
+  const dot = normalized.lastIndexOf('.');
+  const hasExtension = dot > 0 && dot < normalized.length - 1;
+  const base = hasExtension ? normalized.slice(0, dot) : normalized;
+  const extension = hasExtension ? normalized.slice(dot + 1) : defaultExtension.replace(/^\./, '');
+  return `${base}-${marker}.${extension}`;
+}
+
 /**
  * Build a Content-Disposition attachment header that preserves non-ASCII
  * filenames. `filename` is kept as a conservative ASCII fallback for older

@@ -20,7 +20,7 @@ import { join } from 'path';
 import { MysqlClient } from '../clients/mysql.client';
 import { PdfSdkClient, SdkFileResult } from '../clients/pdf-sdk.client';
 import { ConversionService, ConversionResult } from '../conversion/conversion.service';
-import { normalizeUploadedFilename, parseFilenameFromHeader, sanitizeFilename } from '../common/utils/filename';
+import { normalizeUploadedFilename, parseFilenameFromHeader, processedFilename, sanitizeFilename } from '../common/utils/filename';
 import { CreateTaskDto } from './task.dto';
 // The optional storageDir parameter lets tests avoid writing task results into
 // the runtime storage path.
@@ -264,6 +264,11 @@ function contentTypeOf(r: SdkFileResult | ConversionResult): string {
   return c ?? 'application/octet-stream';
 }
 function filenameOf(r: SdkFileResult | ConversionResult, dto: CreateTaskDto, files: Express.Multer.File[]): string | undefined {
+  if (dto.kind === 'pdf' && dto.op === 'delete' && files[0]?.originalname) {
+    const request = dto.request ? safeJson(dto.request) : undefined;
+    const explicit = stringOption(request, 'outputFileName');
+    return explicit ?? processedFilename(files[0].originalname, 'deleted-pages');
+  }
   const cd = (r as SdkFileResult).headers?.['content-disposition'];
   if (cd) {
     const filename = parseFilenameFromHeader(cd);

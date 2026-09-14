@@ -25,6 +25,11 @@ import { toolI18nKey } from '@/config/i18n-keys';
 import {
   buildRequest,
   defaultParameter,
+  deletePageRangeValidationKey,
+  encryptPasswordValidationKey,
+  imageDpiValidationKey,
+  insertSourcePageRangeValidationKey,
+  watermarkValidationKey,
   type UploadParameter,
 } from '@/config/param-schema';
 import type { Endpoint, PdfOp } from '@/config/convert-map';
@@ -200,6 +205,9 @@ function matchesAccept(accept: string, ext: string): boolean {
  * a dropped file can't bypass the size / extension / merge-limit checks.
  */
 function validateSelection(fileArray: File[]): string | null {
+  if (fileArray.some((f) => f.size === 0)) {
+    return 'pdfToolDetail.upload.errors.apiCodes.fileEmpty';
+  }
   if (isPdfStandardTool.value && fileArray.length > 1) {
     return 'pdfToolDetail.upload.errors.pdfaFileLimit';
   }
@@ -328,17 +336,48 @@ function handleDelete() {
 
 function handleConvert(val: boolean) {
   if (!file.value) return;
+  if (props.fromType === 'pdf' && ['png', 'jpg', 'img'].includes(props.toType)) {
+    const validationKey = imageDpiValidationKey(parameter.value.imgDpi);
+    if (validationKey) {
+      errorText.value = t(validationKey);
+      return;
+    }
+  }
+  if (props.toType === 'addWatermark') {
+    const validationKey = watermarkValidationKey(parameter.value, watermarkImageFile.value);
+    if (validationKey) {
+      errorText.value = t(validationKey);
+      return;
+    }
+  }
   if (props.toType === 'merge' && (file.value.rawFiles?.length ?? 0) < 2) {
     errorText.value = t('pdfToolDetail.upload.errors.mergeRequired');
     return;
   }
-  if (props.toType === 'addWatermark' && parameter.value.watermarkType === 'image' && !watermarkImageFile.value) {
-    errorText.value = t('pdfToolDetail.upload.errors.watermarkImageRequired');
-    return;
+  if (props.toType === 'delete') {
+    const validationKey = deletePageRangeValidationKey(parameter.value.pageRanges);
+    if (validationKey) {
+      errorText.value = t(validationKey);
+      return;
+    }
+  }
+  if (props.toType === 'encrypt') {
+    const validationKey = encryptPasswordValidationKey(parameter.value.encryptUserPassword);
+    if (validationKey) {
+      errorText.value = t(validationKey);
+      return;
+    }
   }
   if (props.toType === 'insert' && parameter.value.insertActionType === 'FROM_PDF' && !insertTargetFile.value) {
     errorText.value = t('pdfToolDetail.upload.errors.insertFileCount');
     return;
+  }
+  if (props.toType === 'insert' && parameter.value.insertActionType === 'FROM_PDF') {
+    const validationKey = insertSourcePageRangeValidationKey(parameter.value.sourcePages);
+    if (validationKey) {
+      errorText.value = t(validationKey);
+      return;
+    }
   }
   if (props.toType === 'pdfa' && !iccProfileFile.value) {
     errorText.value = t('pdfToolDetail.upload.errors.iccProfileRequired');
@@ -591,8 +630,11 @@ function outputExtension(toType: string, ep: Endpoint): string {
 }
 
 function fallbackFilename(): string {
+  const explicit = parameter.value.outputFileName.trim();
+  if (explicit) return explicit;
   const base = file.value?.raw?.name?.replace(/\.[^.]+$/, '') || 'output';
-  return `${base}.${outputExtension(props.toType, props.endpoint)}`;
+  const suffix = props.toType === 'delete' ? '-deleted-pages' : '';
+  return `${base}${suffix}.${outputExtension(props.toType, props.endpoint)}`;
 }
 </script>
 

@@ -29,20 +29,20 @@ export interface ConversionFeatures {
 }
 
 export const CONVERSION_FEATURES: Record<string, ConversionFeatures> = {
-  'pdf/docx': { flowLayout: true, includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, retainBgImg: true, pageRange: true, password: true },
-  'pdf/ofd': { password: true, allowOcr: true, ocrSettings: true, includeImages: true, includeAnnotations: true, pageRange: true, pageOneOutput: true },
+  'pdf/docx': { flowLayout: true, aiLayout: true, includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, retainBgImg: true, pageRange: true, password: true },
+  'pdf/ofd': { password: true, aiLayout: true, allowOcr: true, ocrSettings: true, includeImages: true, includeAnnotations: true, pageRange: true, pageOneOutput: true },
   'pdf/markdown': { aiLayout: true, includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, retainBgImg: true, pageRange: true, password: true },
-  'pdf/xlsx': { includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, excelOptions: true, pageRange: true, password: true },
-  'pdf/pptx': { includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, retainBgImg: true, pageRange: true, password: true },
-  'pdf/html': { htmlOption: true, includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, pageRange: true, password: true },
-  'pdf/txt': { allowOcr: true, ocrSettings: true, pageOneOutput: true, pageRange: true, password: true },
-  'pdf/csv': { includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, mergeCsv: true, pageRange: true, password: true },
-  'pdf/rtf': { includeImages: true, includeAnnotations: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, retainBgImg: true, pageRange: true, password: true },
-  'pdf/json': { jsonContent: true, includeImages: true, includeAnnotations: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, pageRange: true, password: true },
-  'pdf/png': { imageFormat: true, imgDpi: true, pageRange: true, password: true },
-  'pdf/jpg': { imageFormat: true, imgDpi: true, pageRange: true, password: true },
-  'pdf/img': { imageFormat: true, imgDpi: true, pageRange: true, password: true },
-  'pdf/searchablePdf': { includeImages: true, transparentText: true, formulaToImage: true, ocrSettings: true, pageOneOutput: true, retainBgImg: true, pageRange: true, password: true },
+  'pdf/xlsx': { aiLayout: true, includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, excelOptions: true, pageRange: true, password: true },
+  'pdf/pptx': { aiLayout: true, includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, retainBgImg: true, pageRange: true, password: true },
+  'pdf/html': { aiLayout: true, htmlOption: true, includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, pageRange: true, password: true },
+  'pdf/txt': { aiLayout: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, pageRange: true, password: true },
+  'pdf/csv': { aiLayout: true, includeImages: true, includeAnnotations: true, formulaToImage: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, mergeCsv: true, pageRange: true, password: true },
+  'pdf/rtf': { aiLayout: true, includeImages: true, includeAnnotations: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, retainBgImg: true, pageRange: true, password: true },
+  'pdf/json': { aiLayout: true, jsonContent: true, includeImages: true, includeAnnotations: true, allowOcr: true, ocrSettings: true, pageOneOutput: true, pageRange: true, password: true },
+  'pdf/png': { aiLayout: true, imageFormat: true, imgDpi: true, pageRange: true, password: true },
+  'pdf/jpg': { aiLayout: true, imageFormat: true, imgDpi: true, pageRange: true, password: true },
+  'pdf/img': { aiLayout: true, imageFormat: true, imgDpi: true, pageRange: true, password: true },
+  'pdf/searchablePdf': { aiLayout: true, includeImages: true, transparentText: true, formulaToImage: true, ocrSettings: true, pageOneOutput: true, retainBgImg: true, pageRange: true, password: true },
   'pdf/merge': {},
   'pdf/split': { pageRange: true, password: true },
   'pdf/insert': { password: true, insertOptions: true },
@@ -165,12 +165,17 @@ export interface BuildRequestResult {
 }
 
 // ---- helpers ---------------------------------------------------------------
-function getOutputFileName(parameter: UploadParameter, files: File[], extension = 'pdf'): string {
+function getOutputFileName(
+  parameter: UploadParameter,
+  files: File[],
+  extension = 'pdf',
+  suffix = '',
+): string {
   if (parameter.outputFileName.trim()) return parameter.outputFileName.trim();
   const name = files[0]?.name ?? 'output';
   const idx = name.lastIndexOf('.');
   const base = idx > -1 ? name.substring(0, idx) : name;
-  return `${base}.${extension}`;
+  return `${base}${suffix}.${extension}`;
 }
 function setIfFilled(target: Record<string, unknown>, key: string, value: unknown): void {
   if (value === '' || value === null || value === undefined) return;
@@ -198,7 +203,12 @@ function splitRangesOrAll(value: string): string[] {
 function buildPdfEditPayload(input: BuildRequestInput): { payload: Record<string, unknown>; extraFiles?: File[]; imageFile?: File } {
   const { toType, parameter, files, password } = input;
   const pageRanges = parameter.pageRanges;
-  const outputFileName = getOutputFileName(parameter, files, toType === 'split' ? 'zip' : 'pdf');
+  const outputFileName = getOutputFileName(
+    parameter,
+    files,
+    toType === 'split' ? 'zip' : 'pdf',
+    toType === 'delete' ? '-deleted-pages' : '',
+  );
   if (toType === 'merge') {
     return { payload: {
       pageRanges: files.map((_, i) => (parameter.mergeFilePageRanges as string[] | undefined)?.[i] || 'all'),
@@ -277,6 +287,99 @@ function buildPdfEditPayload(input: BuildRequestInput): { payload: Record<string
   return { payload: { pages: pageRanges, outputFileName } };
 }
 
+export function watermarkValidationKey(
+  parameter: UploadParameter,
+  imageFile?: File | null,
+): string | null {
+  if (parameter.watermarkType === 'text' && parameter.watermarkText.trim() === '') {
+    return 'pdfToolDetail.upload.errors.watermarkTextRequired';
+  }
+  if (parameter.watermarkType === 'image') {
+    if (!imageFile) return 'pdfToolDetail.upload.errors.watermarkImageRequired';
+    if (imageFile.size === 0) return 'pdfToolDetail.upload.errors.apiCodes.fileEmpty';
+  }
+
+  const opacity = numericValue(parameter.watermarkOpacity);
+  if (opacity === null || opacity < 0 || opacity > 1) {
+    return 'pdfToolDetail.upload.errors.watermarkOpacityInvalid';
+  }
+
+  if (hasValue(parameter.watermarkFontSize)) {
+    const fontSize = numericValue(parameter.watermarkFontSize);
+    if (fontSize === null || fontSize <= 0) {
+      return 'pdfToolDetail.upload.errors.watermarkFontSizeInvalid';
+    }
+  }
+
+  const positionValues = [
+    parameter.watermarkRotation,
+    parameter.watermarkHorizOffset,
+    parameter.watermarkVertOffset,
+  ];
+  if (positionValues.some((value) => numericValue(value) === null)) {
+    return 'pdfToolDetail.upload.errors.watermarkPositionInvalid';
+  }
+
+  const spacingValues = [
+    parameter.watermarkHorizontalSpacing,
+    parameter.watermarkVerticalSpacing,
+  ];
+  if (spacingValues.some((value) => {
+    if (!hasValue(value)) return false;
+    const spacing = numericValue(value);
+    return spacing === null || spacing < 0;
+  })) {
+    return 'pdfToolDetail.upload.errors.watermarkSpacingInvalid';
+  }
+
+  return null;
+}
+
+export function insertSourcePageRangeValidationKey(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.toLowerCase() === 'all') return null;
+
+  const ranges = toStringList(trimmed);
+  if (ranges.length === 0 || ranges.some((range) => !isValidOneBasedPageRange(range))) {
+    return 'pdfToolDetail.upload.errors.insertSourcePagesInvalid';
+  }
+  return null;
+}
+
+export function deletePageRangeValidationKey(value: string): string | null {
+  return value.trim() ? null : 'pdfToolDetail.upload.errors.deletePageRangeRequired';
+}
+
+export function encryptPasswordValidationKey(value: string): string | null {
+  return value.trim() ? null : 'pdfToolDetail.upload.errors.encryptPasswordRequired';
+}
+
+export function imageDpiValidationKey(value: unknown): string | null {
+  const dpi = numericValue(value);
+  return dpi !== null && dpi >= 72 && dpi <= 1500
+    ? null
+    : 'pdfToolDetail.upload.errors.imageDpiInvalid';
+}
+
+function isValidOneBasedPageRange(value: string): boolean {
+  if (/^\d+$/.test(value)) return Number(value) >= 1;
+  const range = value.match(/^(\d+)\s*-\s*(\d+)$/);
+  if (!range) return false;
+  const start = Number(range[1]);
+  const end = Number(range[2]);
+  return start >= 1 && end >= start;
+}
+
+function hasValue(value: unknown): boolean {
+  return typeof value === 'number' || (typeof value === 'string' && value.trim() !== '');
+}
+
+function numericValue(value: unknown): number | null {
+  if (!hasValue(value)) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 function conversionFeatureKey(input: BuildRequestInput): string {
   if (input.toType === 'searchablePdf') return 'pdf/searchablePdf';
   if (input.fromType === 'img') return `img/${input.toType}`;
@@ -294,7 +397,7 @@ function buildConversionPayload(input: BuildRequestInput): Record<string, unknow
     payload[key] = value;
   };
 
-  set('enableAiLayout', !!features.flowLayout || !!features.aiLayout);
+  set('enableAiLayout', !!features.aiLayout);
   set('pageLayoutMode', !!features.flowLayout);
   set('isContainImg', !!features.includeImages);
   set('isContainAnnot', !!features.includeAnnotations);

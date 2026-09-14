@@ -549,7 +549,7 @@ watch(
         <div class="setting-row">
           <div class="setting-label">{{ t('pdfToolDetail.upload.settings.sourcePages') }}:</div>
           <div class="setting-control">
-            <input type="text" placeholder="0-1,3-3" v-model="parameter.sourcePages" :disabled="converting" class="text-input">
+            <input type="text" placeholder="1-2,4" v-model="parameter.sourcePages" :disabled="converting" class="text-input">
           </div>
         </div>
         <!-- 15. Insert PDF password -->

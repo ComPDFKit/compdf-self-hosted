@@ -26,6 +26,10 @@ import { ApiKeyGuard } from '../auth/guards/api-key.guard';
 import { contentDispositionAttachment, sanitizeFilename } from '../common/utils/filename';
 import { CreateTaskDto } from './task.dto';
 import { TaskService } from './task.service';
+import { validateAddWatermarkRequest } from '../pdf/watermark-validation';
+import { validateDeletePagesRequest, validateInsertFromPdfRequest } from '../pdf/page-range-validation';
+import { validateEncryptRequest } from '../pdf/encryption-validation';
+import { validatePdfImageOptions } from '../conversion/dpi-validation';
 
 @Controller('api/v1/task')
 @UseGuards(ApiKeyGuard)
@@ -77,6 +81,21 @@ export class TaskController {
   ): Promise<{ taskId: string; status: 'pending' }> {
     const taskDto = createTaskDtoFromPath(source, target, dto);
     const orderedFiles = collectTaskFiles(taskDto, files);
+    if (taskDto.kind === 'conversion' && taskDto.op === 'convert' && taskDto.target === 'png') {
+      validatePdfImageOptions(parseOptions(taskDto.options));
+    }
+    if (taskDto.kind === 'pdf' && taskDto.op === 'watermark/add') {
+      validateAddWatermarkRequest(parseRequest(taskDto.request), files?.imageFile?.[0]);
+    }
+    if (taskDto.kind === 'pdf' && taskDto.op === 'insert-from-pdf') {
+      validateInsertFromPdfRequest(parseRequest(taskDto.request));
+    }
+    if (taskDto.kind === 'pdf' && taskDto.op === 'delete') {
+      validateDeletePagesRequest(parseRequest(taskDto.request));
+    }
+    if (taskDto.kind === 'pdf' && taskDto.op === 'encrypt') {
+      validateEncryptRequest(parseRequest(taskDto.request));
+    }
     const { taskId } = await this.tasks.create(taskDto, orderedFiles, (req as any).apiKeyId ?? null);
     return { taskId, status: 'pending' };
   }
@@ -113,6 +132,32 @@ export class TaskController {
     // the standard numeric error response.
     throw new ConflictException({ code: 'TASK_NOT_READY', message: `task status is ${info.status}` });
   }
+}
+
+function parseRequest(request: string | undefined): Record<string, unknown> {
+  if (!request) return {};
+  try {
+    const parsed = JSON.parse(request);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Use the same public error contract as the other watermark validations.
+  }
+  throw new BadRequestException({ code: 'INVALID_ARGUMENT', message: 'request must be a valid JSON object.' });
+}
+
+function parseOptions(options: string | undefined): Record<string, unknown> | undefined {
+  if (!options) return undefined;
+  try {
+    const parsed = JSON.parse(options);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Return the same public error shape as the synchronous conversion route.
+  }
+  throw new BadRequestException({ code: 'INVALID_REQUEST', message: 'options must be a valid JSON object.' });
 }
 
 type TaskUploadFields = {

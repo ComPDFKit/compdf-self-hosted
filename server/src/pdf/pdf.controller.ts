@@ -30,7 +30,10 @@ import type { Request, Response } from 'express';
 import { ApiKeyGuard } from '../auth/guards/api-key.guard';
 import { PdfSdkClient, SdkFileResult } from '../clients/pdf-sdk.client';
 import { ErrorCode } from '../common/errors/error-codes';
-import { contentDispositionAttachment, normalizeUploadedFilename, parseFilenameFromHeader, sanitizeFilename } from '../common/utils/filename';
+import { contentDispositionAttachment, normalizeUploadedFilename, parseFilenameFromHeader, processedFilename, sanitizeFilename } from '../common/utils/filename';
+import { validateEncryptRequest } from './encryption-validation';
+import { validateDeletePagesRequest, validateInsertFromPdfRequest } from './page-range-validation';
+import { validateAddWatermarkRequest } from './watermark-validation';
 
 type MulterFile = Express.Multer.File;
 
@@ -93,6 +96,7 @@ export class PdfController {
     const file = requireFile(files.file?.[0], 'file');
     const insertFile = requireFile(files.insertFile?.[0], 'insertFile');
     const request = extractRequest(req.body);
+    validateInsertFromPdfRequest(request);
     this.logIncoming('insert-from-pdf', request, [file, insertFile]);
     const result = await this.client.insertFromPdf(file, insertFile, request, tokenOf(req));
     this.sendFile(res, result, 'inserted-pages.pdf');
@@ -113,9 +117,10 @@ export class PdfController {
   async delete(@UploadedFile() file: MulterFile, @Req() req: Request, @Res() res: Response): Promise<void> {
     const upload = requireFile(file, 'file');
     const request = extractRequest(req.body);
+    validateDeletePagesRequest(request);
     this.logIncoming('delete', request, [upload]);
     const result = await this.client.delete(upload, request, tokenOf(req));
-    this.sendFile(res, result, 'deleted-pages.pdf');
+    this.sendFile(res, result, 'deleted-pages.pdf', deleteDownloadFilename(upload, request));
   }
 
   @Post('rotate')
@@ -135,6 +140,7 @@ export class PdfController {
   async encrypt(@UploadedFile() file: MulterFile, @Req() req: Request, @Res() res: Response): Promise<void> {
     const upload = requireFile(file, 'file');
     const request = extractRequest(req.body);
+    validateEncryptRequest(request);
     this.logIncoming('encrypt', request, [upload]);
     const result = await this.client.encrypt(upload, request, tokenOf(req));
     this.sendFile(res, result, 'encrypted.pdf');
@@ -167,6 +173,7 @@ export class PdfController {
     const file = requireFile(files.file?.[0], 'file');
     const imageFile = files.imageFile?.[0]; // optional — present only for type=image
     const request = extractRequest(req.body);
+    validateAddWatermarkRequest(request, imageFile);
     this.logIncoming('watermark/add', request, imageFile ? [file, imageFile] : [file]);
     const result = await this.client.addWatermark(file, request, tokenOf(req), imageFile);
     this.sendFile(res, result, 'watermarked.pdf');
@@ -262,10 +269,15 @@ export class PdfController {
    * per-operation `defaultFilename` is used. Uses the raw express Response so
    * binary bytes are sent verbatim (no JSON serialization).
    */
-  private sendFile(res: Response, result: SdkFileResult, defaultFilename: string): void {
+  private sendFile(
+    res: Response,
+    result: SdkFileResult,
+    defaultFilename: string,
+    preferredFilename?: string,
+  ): void {
     const contentType = result.headers['content-type'] ?? 'application/octet-stream';
     const filename = sanitizeFilename(
-      parseFilenameFromHeader(result.headers['content-disposition']),
+      preferredFilename ?? parseFilenameFromHeader(result.headers['content-disposition']),
       defaultFilename,
     );
     res.set('Content-Type', contentType);
@@ -280,6 +292,15 @@ export class PdfController {
       request: sanitizeObjectForLog(request),
     })}`);
   }
+}
+
+function deleteDownloadFilename(
+  file: MulterFile,
+  request: Record<string, unknown>,
+): string {
+  const requested = request.outputFileName;
+  if (typeof requested === 'string' && requested.trim()) return requested.trim();
+  return processedFilename(file.originalname, 'deleted-pages');
 }
 
 /**

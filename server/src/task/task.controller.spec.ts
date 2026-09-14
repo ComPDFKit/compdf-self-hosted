@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import type { Request } from 'express';
 import { describe, expect, it, vi } from 'vitest';
 import { TaskController } from './task.controller';
@@ -55,5 +56,96 @@ describe('TaskController PDF standards conversion', () => {
       request: '{"standard":"pdfa1b"}',
     }, [pdf, icc], 'key-1');
     expect(result).toEqual({ taskId: 'task-pdfa', status: 'pending' });
+  });
+});
+
+describe('TaskController watermark validation', () => {
+  it('rejects a blank text watermark before creating a task', async () => {
+    const create = vi.fn();
+    const controller = new TaskController({ create } as unknown as TaskService);
+    const pdf = { originalname: 'sample.pdf', buffer: Buffer.from('%PDF') } as Express.Multer.File;
+    const req = { apiKeyId: 'key-1' } as unknown as Request;
+
+    await expect(controller.create(
+      'pdf',
+      'watermark/add',
+      { request: '{"type":"text","text":""}' },
+      { file: [pdf] },
+      req,
+    )).rejects.toBeInstanceOf(BadRequestException);
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe('TaskController insert-from-pdf page range validation', () => {
+  it('rejects a zero-based source range before creating a task', async () => {
+    const create = vi.fn();
+    const controller = new TaskController({ create } as unknown as TaskService);
+    const pdf = { originalname: 'source.pdf', buffer: Buffer.from('%PDF') } as Express.Multer.File;
+    const inserted = { originalname: 'insert.pdf', buffer: Buffer.from('%PDF') } as Express.Multer.File;
+    const req = { apiKeyId: 'key-1' } as unknown as Request;
+
+    await expect(controller.create(
+      'pdf',
+      'insert-from-pdf',
+      { request: '{"sourcePageRanges":["0-1"]}' },
+      { file: [pdf], insertFile: [inserted] },
+      req,
+    )).rejects.toBeInstanceOf(BadRequestException);
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe('TaskController delete page range validation', () => {
+  it('rejects an empty page range before creating a task', async () => {
+    const create = vi.fn();
+    const controller = new TaskController({ create } as unknown as TaskService);
+    const pdf = { originalname: 'source.pdf', buffer: Buffer.from('%PDF') } as Express.Multer.File;
+    const req = { apiKeyId: 'key-1' } as unknown as Request;
+
+    await expect(controller.create(
+      'pdf',
+      'delete',
+      { request: '{"pageRanges":""}' },
+      { file: [pdf] },
+      req,
+    )).rejects.toBeInstanceOf(BadRequestException);
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe('TaskController encrypt validation', () => {
+  it('rejects an empty password before creating a task', async () => {
+    const create = vi.fn();
+    const controller = new TaskController({ create } as unknown as TaskService);
+    const pdf = { originalname: 'source.pdf', buffer: Buffer.from('%PDF') } as Express.Multer.File;
+    const req = { apiKeyId: 'key-1' } as unknown as Request;
+
+    await expect(controller.create(
+      'pdf',
+      'encrypt',
+      { request: '{"userPassword":""}' },
+      { file: [pdf] },
+      req,
+    )).rejects.toBeInstanceOf(BadRequestException);
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
+describe('TaskController PDF image DPI validation', () => {
+  it('rejects an out-of-range DPI before creating a task', async () => {
+    const create = vi.fn();
+    const controller = new TaskController({ create } as unknown as TaskService);
+    const pdf = { originalname: 'source.pdf', buffer: Buffer.from('%PDF') } as Express.Multer.File;
+    const req = { apiKeyId: 'key-1' } as unknown as Request;
+
+    await expect(controller.create(
+      'pdf',
+      'png',
+      { options: JSON.stringify({ imageScaling: 1501 / 72 }) },
+      { file: [pdf] },
+      req,
+    )).rejects.toBeInstanceOf(BadRequestException);
+    expect(create).not.toHaveBeenCalled();
   });
 });
