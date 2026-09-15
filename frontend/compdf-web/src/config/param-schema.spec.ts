@@ -156,6 +156,58 @@ describe('add watermark request payload', () => {
   });
 });
 
+describe('PDF edit password payloads', () => {
+  it('includes the source PDF password when removing a watermark', () => {
+    const result = buildRequest({
+      fromType: 'pdf',
+      toType: 'removeWatermark',
+      parameter: defaultParameter(),
+      password: 'source-secret',
+      files: [pdf],
+    });
+
+    expect(result.payload.password).toBe('source-secret');
+  });
+
+  it('builds per-file passwords for merge using the shared password as fallback', () => {
+    const parameter = defaultParameter();
+    parameter.mergePasswords = ['', 'second-secret'];
+    const secondPdf = { name: 'second.pdf' } as File;
+
+    const result = buildRequest({
+      fromType: 'pdf',
+      toType: 'merge',
+      parameter,
+      password: 'shared-secret',
+      files: [pdf, secondPdf],
+    });
+
+    expect(result.payload.passwords).toEqual(['shared-secret', 'second-secret']);
+  });
+
+  it('uses separate target and inserted PDF passwords for page insertion', () => {
+    const parameter = defaultParameter();
+    parameter.insertActionType = 'FROM_PDF';
+    parameter.insertTargetPassword = 'insert-secret';
+    const insertFile = { name: 'insert.pdf' } as File;
+
+    const result = buildRequest({
+      fromType: 'pdf',
+      toType: 'insert',
+      parameter,
+      password: 'target-secret',
+      files: [pdf],
+      insertTargetFile: insertFile,
+    });
+
+    expect(result.payload).toMatchObject({
+      targetPassword: 'target-secret',
+      insertPassword: 'insert-secret',
+    });
+    expect(result.extraFiles).toEqual([insertFile]);
+  });
+});
+
 describe('delete pages output filename', () => {
   it('preserves a Chinese source name and adds the processing suffix', () => {
     const parameter = defaultParameter();

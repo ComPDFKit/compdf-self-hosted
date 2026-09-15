@@ -55,7 +55,7 @@ export class PdfSdkClient {
     return this.callSync(
       '/v1/sync/pages/merge',
       files.map((f) => ({ fieldname: 'files', ...f })),
-      normalizeMergeRequest(request),
+      normalizeMergeRequest(request, files.length),
       token,
     );
   }
@@ -80,7 +80,7 @@ export class PdfSdkClient {
     return this.callSync(
       '/v1/sync/pages/insert-from-pdf',
       [toPart('file', file), toPart('insertFile', insertFile)],
-      stripRequestKeys(request, ['actionType', 'password']),
+      normalizeInsertFromPdfRequest(request),
       token,
     );
   }
@@ -310,8 +310,25 @@ const COMPRESS_PRESET_FLAGS: Record<'low' | 'medium' | 'high', string[]> = {
   high: ['RMPAGETHUMBNAIL', 'RMINVABK', 'RMINVALINK'],
 };
 
-function normalizeMergeRequest(request: Record<string, unknown>): Record<string, unknown> {
-  return stripRequestKeys(request, ['password']);
+function normalizeMergeRequest(request: Record<string, unknown>, fileCount: number): Record<string, unknown> {
+  const { password, ...result } = request;
+  // The public API accepts one shared password; the internal SDK requires a
+  // password entry aligned with every uploaded source file.
+  if ((!Array.isArray(result.passwords) || result.passwords.length === 0) && typeof password === 'string' && password) {
+    result.passwords = Array.from({ length: fileCount }, () => password);
+  }
+  return result;
+}
+
+function normalizeInsertFromPdfRequest(request: Record<string, unknown>): Record<string, unknown> {
+  const withoutActionType = stripRequestKeys(request, ['actionType']);
+  const { password, ...result } = withoutActionType;
+  // Public `password` identifies the main PDF; the internal SDK calls it
+  // `targetPassword` and uses `insertPassword` for the second PDF.
+  if ((!result.targetPassword || typeof result.targetPassword !== 'string') && typeof password === 'string' && password) {
+    result.targetPassword = password;
+  }
+  return result;
 }
 
 function normalizePagesRequest(
@@ -366,7 +383,7 @@ function normalizeEncryptRequest(request: Record<string, unknown>): Record<strin
 }
 
 function normalizeRemoveWatermarkRequest(request: Record<string, unknown>): Record<string, unknown> {
-  const result = stripRequestKeys(request, ['password']);
+  const result = { ...request };
   if (!Object.prototype.hasOwnProperty.call(result, 'pages')) return result;
   const pages = result.pages;
   if (pages === '' || pages === 'all' || pages === undefined || pages === null) {
