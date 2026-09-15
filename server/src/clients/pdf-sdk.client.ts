@@ -123,7 +123,7 @@ export class PdfSdkClient {
   ): Promise<SdkFileResult> {
     const parts = [toPart('file', file)];
     if (imageFile) parts.push(toPart('imageFile', imageFile));
-    return this.callSync('/v1/sync/watermarks/add', parts, stripRequestKeys(request, ['password']), token);
+    return this.callSync('/v1/sync/watermarks/add', parts, request, token);
   }
 
   /** POST /v1/sync/watermarks/remove — `file`. */

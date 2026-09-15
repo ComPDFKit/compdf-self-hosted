@@ -137,6 +137,25 @@ describe('watermark parameter validation', () => {
   });
 });
 
+describe('add watermark request payload', () => {
+  it('includes the source PDF password in the request JSON', () => {
+    const parameter = defaultParameter();
+    parameter.watermarkText = 'CONFIDENTIAL';
+
+    const result = buildRequest({
+      fromType: 'pdf',
+      toType: 'addWatermark',
+      parameter,
+      password: '123',
+      files: [pdf],
+    });
+
+    expect(result.field).toBe('request');
+    expect(result.passwordField).toBe('inline');
+    expect(result.payload.password).toBe('123');
+  });
+});
+
 describe('delete pages output filename', () => {
   it('preserves a Chinese source name and adds the processing suffix', () => {
     const parameter = defaultParameter();
