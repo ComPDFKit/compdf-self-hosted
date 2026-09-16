@@ -29,6 +29,7 @@ import { TaskService } from './task.service';
 import { validateAddWatermarkRequest } from '../pdf/watermark-validation';
 import { validateDeletePagesRequest, validateInsertFromPdfRequest } from '../pdf/page-range-validation';
 import { validateEncryptRequest } from '../pdf/encryption-validation';
+import { validateCompressRequest } from '../pdf/compression-validation';
 import { validatePdfImageOptions } from '../conversion/dpi-validation';
 
 @Controller('api/v1/task')
@@ -95,6 +96,9 @@ export class TaskController {
     }
     if (taskDto.kind === 'pdf' && taskDto.op === 'encrypt') {
       validateEncryptRequest(parseRequest(taskDto.request));
+    }
+    if (taskDto.kind === 'pdf' && taskDto.op === 'compress') {
+      validateCompressRequest(parseRequest(taskDto.request));
     }
     const { taskId } = await this.tasks.create(taskDto, orderedFiles, (req as any).apiKeyId ?? null);
     return { taskId, status: 'pending' };

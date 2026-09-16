@@ -24,6 +24,7 @@ import { apiErrorTranslationKey } from '@/api/error-localization';
 import { toolI18nKey } from '@/config/i18n-keys';
 import {
   buildRequest,
+  compressImageQualityValidationKey,
   defaultParameter,
   deletePageRangeValidationKey,
   encryptPasswordValidationKey,
@@ -345,6 +346,13 @@ function handleConvert(val: boolean) {
   }
   if (props.toType === 'addWatermark') {
     const validationKey = watermarkValidationKey(parameter.value, watermarkImageFile.value);
+    if (validationKey) {
+      errorText.value = t(validationKey);
+      return;
+    }
+  }
+  if (props.toType === 'compress') {
+    const validationKey = compressImageQualityValidationKey(parameter.value);
     if (validationKey) {
       errorText.value = t(validationKey);
       return;

@@ -98,6 +98,38 @@ describe('PdfController delete page range validation', () => {
   });
 });
 
+describe('PdfController compression validation and filename', () => {
+  it('rejects an out-of-range image quality before calling the SDK', async () => {
+    const compress = vi.fn();
+    const controller = new PdfController({ compress } as unknown as PdfSdkClient);
+    const pdf = { originalname: 'source.pdf', buffer: Buffer.from('%PDF') } as Express.Multer.File;
+    const req = { body: { request: '{"imageQuality":101}' } } as Request;
+
+    await expect(controller.compress(pdf, req, {} as Response)).rejects.toBeInstanceOf(BadRequestException);
+    expect(compress).not.toHaveBeenCalled();
+  });
+
+  it('prefers the requested UTF-8 output filename over the SDK default', async () => {
+    const compress = vi.fn().mockResolvedValue({
+      buffer: Buffer.from('%PDF compressed'),
+      headers: {
+        'content-type': 'application/pdf',
+        'content-disposition': 'attachment; filename="optimized.pdf"',
+      },
+    });
+    const controller = new PdfController({ compress } as unknown as PdfSdkClient);
+    const pdf = { originalname: 'source.pdf', buffer: Buffer.from('%PDF') } as Express.Multer.File;
+    const req = { body: { request: '{"imageQuality":80,"outputFileName":"中文 空格 #& 测试.pdf"}' } } as Request;
+    const resMock = { set: vi.fn(), status: vi.fn(), send: vi.fn() };
+    resMock.status.mockReturnValue(resMock);
+
+    await controller.compress(pdf, req, resMock as unknown as Response);
+
+    const disposition = resMock.set.mock.calls.find(([name]) => name === 'Content-Disposition')?.[1];
+    expect(disposition).toContain("filename*=UTF-8''%E4%B8%AD%E6%96%87%20%E7%A9%BA%E6%A0%BC%20%23%26%20%E6%B5%8B%E8%AF%95.pdf");
+  });
+});
+
 describe('PdfController encrypt validation', () => {
   it('rejects an empty password before calling the SDK', async () => {
     const encrypt = vi.fn();

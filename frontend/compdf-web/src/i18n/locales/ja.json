@@ -182,6 +182,7 @@
   "pdfToolDetail.upload.errors.deletePageRangeRequired": "削除するページ範囲を入力してください。",
   "pdfToolDetail.upload.errors.encryptPasswordRequired": "PDF を暗号化するパスワードを入力してください。",
   "pdfToolDetail.upload.errors.imageDpiInvalid": "DPI は 72 から 1500 までの数値を入力してください。",
+  "pdfToolDetail.upload.errors.compressImageQualityInvalid": "画像品質は 0 から 100 までの整数で指定してください。",
   "pdfToolDetail.upload.errors.apiCodes.systemError": "システム内部エラーが発生しました。後でもう一度お試しください。",
   "pdfToolDetail.upload.errors.apiCodes.fileDownloadFailed": "アップロードしたファイルをダウンロードできません。",
   "pdfToolDetail.upload.errors.apiCodes.fileEmpty": "ファイルは空にできません。",

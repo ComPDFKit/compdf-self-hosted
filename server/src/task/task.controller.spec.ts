@@ -149,3 +149,21 @@ describe('TaskController PDF image DPI validation', () => {
     expect(create).not.toHaveBeenCalled();
   });
 });
+
+describe('TaskController compression validation', () => {
+  it('rejects an out-of-range image quality before creating a task', async () => {
+    const create = vi.fn();
+    const controller = new TaskController({ create } as unknown as TaskService);
+    const pdf = { originalname: 'source.pdf', buffer: Buffer.from('%PDF') } as Express.Multer.File;
+    const req = { apiKeyId: 'key-1' } as unknown as Request;
+
+    await expect(controller.create(
+      'pdf',
+      'compress',
+      { request: '{"imageQuality":101}' },
+      { file: [pdf] },
+      req,
+    )).rejects.toBeInstanceOf(BadRequestException);
+    expect(create).not.toHaveBeenCalled();
+  });
+});

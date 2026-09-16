@@ -361,6 +361,14 @@ export function imageDpiValidationKey(value: unknown): string | null {
     : 'pdfToolDetail.upload.errors.imageDpiInvalid';
 }
 
+export function compressImageQualityValidationKey(parameter: UploadParameter): string | null {
+  if (parameter.compressQuality !== 'custom') return null;
+  const quality = numericValue(parameter.compressImageQuality);
+  return quality !== null && Number.isInteger(quality) && quality >= 0 && quality <= 100
+    ? null
+    : 'pdfToolDetail.upload.errors.compressImageQualityInvalid';
+}
+
 function isValidOneBasedPageRange(value: string): boolean {
   if (/^\d+$/.test(value)) return Number(value) >= 1;
   const range = value.match(/^(\d+)\s*-\s*(\d+)$/);

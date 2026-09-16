@@ -182,6 +182,7 @@
   "pdfToolDetail.upload.errors.deletePageRangeRequired": "กรุณาระบุช่วงหน้าที่ต้องการลบ",
   "pdfToolDetail.upload.errors.encryptPasswordRequired": "กรุณาระบุรหัสผ่านสำหรับเข้ารหัส PDF",
   "pdfToolDetail.upload.errors.imageDpiInvalid": "DPI ต้องเป็นตัวเลขระหว่าง 72 ถึง 1500",
+  "pdfToolDetail.upload.errors.compressImageQualityInvalid": "คุณภาพของภาพต้องเป็นจำนวนเต็มระหว่าง 0 ถึง 100",
   "pdfToolDetail.upload.errors.apiCodes.systemError": "เกิดข้อผิดพลาดภายในระบบ โปรดลองอีกครั้งในภายหลัง",
   "pdfToolDetail.upload.errors.apiCodes.fileDownloadFailed": "ไม่สามารถดาวน์โหลดไฟล์ที่คุณอัปโหลดได้",
   "pdfToolDetail.upload.errors.apiCodes.fileEmpty": "ไฟล์ต้องไม่เป็นค่าว่าง",

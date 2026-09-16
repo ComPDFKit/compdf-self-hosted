@@ -264,10 +264,13 @@ function contentTypeOf(r: SdkFileResult | ConversionResult): string {
   return c ?? 'application/octet-stream';
 }
 function filenameOf(r: SdkFileResult | ConversionResult, dto: CreateTaskDto, files: Express.Multer.File[]): string | undefined {
-  if (dto.kind === 'pdf' && dto.op === 'delete' && files[0]?.originalname) {
+  if (dto.kind === 'pdf' && (dto.op === 'delete' || dto.op === 'compress')) {
     const request = dto.request ? safeJson(dto.request) : undefined;
     const explicit = stringOption(request, 'outputFileName');
-    return explicit ?? processedFilename(files[0].originalname, 'deleted-pages');
+    if (explicit) return explicit;
+    if (dto.op === 'delete' && files[0]?.originalname) {
+      return processedFilename(files[0].originalname, 'deleted-pages');
+    }
   }
   const cd = (r as SdkFileResult).headers?.['content-disposition'];
   if (cd) {

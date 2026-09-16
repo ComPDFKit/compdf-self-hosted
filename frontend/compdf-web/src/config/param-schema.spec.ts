@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildRequest,
+  compressImageQualityValidationKey,
   CONVERSION_FEATURES,
   defaultParameter,
   deletePageRangeValidationKey,
@@ -298,4 +299,32 @@ describe('PDF image DPI validation', () => {
       expect(imageDpiValidationKey(value)).toBeNull();
     },
   );
+});
+
+describe('compression image quality validation', () => {
+  it.each([-1, 101, '10.5', '', 'not-a-number'])('rejects an invalid custom quality: %o', (value) => {
+    const parameter = defaultParameter();
+    parameter.compressQuality = 'custom';
+    parameter.compressImageQuality = String(value);
+
+    expect(compressImageQualityValidationKey(parameter)).toBe(
+      'pdfToolDetail.upload.errors.compressImageQualityInvalid',
+    );
+  });
+
+  it.each(['0', '30', '100'])('accepts a valid custom quality: %s', (value) => {
+    const parameter = defaultParameter();
+    parameter.compressQuality = 'custom';
+    parameter.compressImageQuality = value;
+
+    expect(compressImageQualityValidationKey(parameter)).toBeNull();
+  });
+
+  it('does not validate the hidden custom value for a preset', () => {
+    const parameter = defaultParameter();
+    parameter.compressQuality = 'medium';
+    parameter.compressImageQuality = '101';
+
+    expect(compressImageQualityValidationKey(parameter)).toBeNull();
+  });
 });

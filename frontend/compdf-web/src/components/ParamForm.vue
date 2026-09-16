@@ -591,7 +591,7 @@ watch(
         <div class="setting-row">
           <div class="setting-label">{{ t('pdfToolDetail.upload.settings.imageQuality') }}:</div>
           <div class="setting-control">
-            <input type="number" min="0" max="100" v-model="parameter.compressImageQuality" :disabled="converting" class="num-input">
+            <input type="number" min="0" max="100" step="1" v-model="parameter.compressImageQuality" :disabled="converting" class="num-input">
           </div>
         </div>
       </template>

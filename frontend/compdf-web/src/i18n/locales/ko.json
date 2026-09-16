@@ -182,6 +182,7 @@
   "pdfToolDetail.upload.errors.deletePageRangeRequired": "삭제할 페이지 범위를 입력하세요.",
   "pdfToolDetail.upload.errors.encryptPasswordRequired": "PDF를 암호화할 비밀번호를 입력하세요.",
   "pdfToolDetail.upload.errors.imageDpiInvalid": "DPI는 72에서 1500 사이의 숫자여야 합니다.",
+  "pdfToolDetail.upload.errors.compressImageQualityInvalid": "이미지 품질은 0에서 100 사이의 정수여야 합니다.",
   "pdfToolDetail.upload.errors.apiCodes.systemError": "시스템 내부 오류가 발생했습니다. 나중에 다시 시도해 주세요.",
   "pdfToolDetail.upload.errors.apiCodes.fileDownloadFailed": "업로드한 파일을 다운로드할 수 없습니다.",
   "pdfToolDetail.upload.errors.apiCodes.fileEmpty": "파일은 비워둘 수 없습니다.",

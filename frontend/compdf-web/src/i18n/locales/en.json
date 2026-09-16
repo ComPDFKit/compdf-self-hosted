@@ -182,6 +182,7 @@
   "pdfToolDetail.upload.errors.deletePageRangeRequired": "Enter the page range to delete.",
   "pdfToolDetail.upload.errors.encryptPasswordRequired": "Enter a password to encrypt the PDF.",
   "pdfToolDetail.upload.errors.imageDpiInvalid": "DPI must be a number between 72 and 1500.",
+  "pdfToolDetail.upload.errors.compressImageQualityInvalid": "Image quality must be an integer between 0 and 100.",
   "pdfToolDetail.upload.errors.apiCodes.systemError": "System error, please try again later.",
   "pdfToolDetail.upload.errors.apiCodes.fileDownloadFailed": "Unable to download your uploaded file.",
   "pdfToolDetail.upload.errors.apiCodes.fileEmpty": "File cannot be empty.",

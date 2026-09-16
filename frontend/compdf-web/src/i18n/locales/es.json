@@ -182,6 +182,7 @@
   "pdfToolDetail.upload.errors.deletePageRangeRequired": "Introduce el intervalo de páginas que quieres eliminar.",
   "pdfToolDetail.upload.errors.encryptPasswordRequired": "Introduce una contraseña para cifrar el PDF.",
   "pdfToolDetail.upload.errors.imageDpiInvalid": "El DPI debe ser un número entre 72 y 1500.",
+  "pdfToolDetail.upload.errors.compressImageQualityInvalid": "La calidad de imagen debe ser un número entero entre 0 y 100.",
   "pdfToolDetail.upload.errors.apiCodes.systemError": "Error interno del sistema, inténtelo de nuevo más tarde.",
   "pdfToolDetail.upload.errors.apiCodes.fileDownloadFailed": "No se puede descargar el archivo cargado.",
   "pdfToolDetail.upload.errors.apiCodes.fileEmpty": "El archivo no puede estar vacío.",

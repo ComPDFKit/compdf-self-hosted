@@ -182,6 +182,7 @@
   "pdfToolDetail.upload.errors.deletePageRangeRequired": "請輸入需要刪除的頁面範圍。",
   "pdfToolDetail.upload.errors.encryptPasswordRequired": "請輸入用於加密 PDF 的密碼。",
   "pdfToolDetail.upload.errors.imageDpiInvalid": "DPI 必須為 72 到 1500 之間的數字。",
+  "pdfToolDetail.upload.errors.compressImageQualityInvalid": "圖片品質必須為 0 到 100 之間的整數。",
   "pdfToolDetail.upload.errors.apiCodes.systemError": "系統內部錯誤，請稍後重試。",
   "pdfToolDetail.upload.errors.apiCodes.fileDownloadFailed": "無法下載您上傳的檔案。",
   "pdfToolDetail.upload.errors.apiCodes.fileEmpty": "檔案不能為空。",

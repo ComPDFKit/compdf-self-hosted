@@ -31,6 +31,7 @@ import { ApiKeyGuard } from '../auth/guards/api-key.guard';
 import { PdfSdkClient, SdkFileResult } from '../clients/pdf-sdk.client';
 import { ErrorCode } from '../common/errors/error-codes';
 import { contentDispositionAttachment, normalizeUploadedFilename, parseFilenameFromHeader, processedFilename, sanitizeFilename } from '../common/utils/filename';
+import { validateCompressRequest } from './compression-validation';
 import { validateEncryptRequest } from './encryption-validation';
 import { validateDeletePagesRequest, validateInsertFromPdfRequest } from './page-range-validation';
 import { validateAddWatermarkRequest } from './watermark-validation';
@@ -217,9 +218,10 @@ export class PdfController {
   async compress(@UploadedFile() file: MulterFile, @Req() req: Request, @Res() res: Response): Promise<void> {
     const upload = requireFile(file, 'file');
     const request = extractRequest(req.body);
+    validateCompressRequest(request);
     this.logIncoming('compress', request, [upload]);
     const result = await this.client.compress(upload, request, tokenOf(req));
-    this.sendFile(res, result, 'optimized.pdf');
+    this.sendFile(res, result, 'optimized.pdf', requestedOutputFilename(request));
   }
 
   // ---- Generation ---------------------------------------------------------
@@ -301,6 +303,11 @@ function deleteDownloadFilename(
   const requested = request.outputFileName;
   if (typeof requested === 'string' && requested.trim()) return requested.trim();
   return processedFilename(file.originalname, 'deleted-pages');
+}
+
+function requestedOutputFilename(request: Record<string, unknown>): string | undefined {
+  const requested = request.outputFileName;
+  return typeof requested === 'string' && requested.trim() ? requested.trim() : undefined;
 }
 
 /**
