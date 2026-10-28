@@ -34,6 +34,7 @@ __pycache__/
 configs/license.local.jwt
 configs/app-license/*
 !configs/app-license/.gitkeep
+!configs/app-license/license.xml
 
 # Logs
 *.log

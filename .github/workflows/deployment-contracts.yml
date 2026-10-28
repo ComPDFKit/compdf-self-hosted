@@ -68,8 +68,8 @@ jobs:
           bash -n deploy/install.sh
           bash -n deploy/apple-container/compdf-container.sh
           node --test deploy/install.test.cjs deploy/apple-container/compdf-container.test.cjs
-          python3 -m unittest discover -s scripts -p '*_test.py'
-          python3 -m unittest discover -s updater/packaging -p '*_test.py'
+          python3 scripts/prepare-release_test.py
+          python3 updater/packaging/container_test.py
 
       - name: Build Server
         working-directory: server
