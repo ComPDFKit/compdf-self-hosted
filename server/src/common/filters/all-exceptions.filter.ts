@@ -131,6 +131,7 @@ function httpCodeFor(status: number): string {
     case 504: return ErrorCode.REQUEST_TIMEOUT;
     case 413: return ErrorCode.FILE_TOO_LARGE;
     case 429: return ErrorCode.CONCURRENCY_LIMIT;
+    case 503: return ErrorCode.SERVICE_MAINTENANCE;
     default: return ErrorCode.INTERNAL_ERROR;
   }
 }

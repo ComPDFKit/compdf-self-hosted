@@ -4,6 +4,39 @@ import { describe, expect, it, vi } from 'vitest';
 import { TaskController } from './task.controller';
 import type { TaskService } from './task.service';
 
+describe('TaskController header/footer and Bates tasks', () => {
+  it.each([
+    ['headers-footers', 'add', { regions: { bottomCenter: 'Page <<1>>' } }],
+    ['headers-footers', 'remove', {}],
+    ['bates', 'add', { position: 'bottomRight', startNumber: 1, digits: 6 }],
+    ['bates', 'remove', {}],
+  ] as const)('creates %s/%s with source password and file', async (resource, action, params) => {
+    const create = vi.fn().mockResolvedValue({ taskId: 'task-decoration' });
+    const controller = new TaskController({ create } as unknown as TaskService);
+    const file = { originalname: 'source.pdf', buffer: Buffer.from('%PDF') } as Express.Multer.File;
+    const request = JSON.stringify({ ...params, password: 'file-password' });
+    const method = resource === 'bates' ? 'createPdfBatesTask' : 'createPdfHeadersFootersTask';
+    expect(await controller[method](action, { request }, { file: [file] }, { apiKeyId: 'key-1' } as unknown as Request))
+      .toEqual({ taskId: 'task-decoration', status: 'pending' });
+    expect(create).toHaveBeenCalledWith({ kind: 'pdf', op: `${resource}/${action}`, request }, [file], 'key-1');
+  });
+
+  it.each(['read', 'unsupported'])('rejects unsupported asynchronous action %s before persistence', async (action) => {
+    const create = vi.fn();
+    const controller = new TaskController({ create } as unknown as TaskService);
+    await expect(controller.createPdfBatesTask(action, {}, {}, {} as Request)).rejects.toBeInstanceOf(BadRequestException);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid Bates parameters before creating a task', async () => {
+    const create = vi.fn();
+    const controller = new TaskController({ create } as unknown as TaskService);
+    const file = { originalname: 'source.pdf', buffer: Buffer.from('%PDF') } as Express.Multer.File;
+    await expect(controller.createPdfBatesTask('add', { request: '{}' }, { file: [file] }, {} as Request)).rejects.toBeInstanceOf(BadRequestException);
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
 describe('TaskController PDF to Markdown', () => {
   it('creates an async conversion task with type=pdf/markdown', async () => {
     const create = vi.fn().mockResolvedValue({ taskId: 'task-1' });

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["images", "license", "database", "server", "app", "infra"],
+  "properties": {
+    "images": {
+      "type": "object",
+      "required": ["infra", "app", "server"]
+    },
+    "license": {
+      "type": "object",
+      "required": ["existingSecret", "key"],
+      "properties": {
+        "existingSecret": { "type": "string", "minLength": 1 },
+        "key": { "type": "string", "minLength": 1 }
+      }
+    },
+    "database": {
+      "type": "object",
+      "required": ["existingSecret", "passwordKey", "name", "user"],
+      "properties": {
+        "existingSecret": { "type": "string", "minLength": 1 },
+        "passwordKey": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "user": { "type": "string", "minLength": 1 }
+      }
+    },
+    "server": { "type": "object" },
+    "app": { "type": "object" },
+    "infra": {
+      "type": "object",
+      "required": ["enabled", "objectStorage"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "objectStorage": {
+          "type": "object",
+          "required": ["existingSecret", "accessKeyKey", "secretKeyKey"],
+          "properties": {
+            "existingSecret": { "type": "string", "minLength": 1 },
+            "accessKeyKey": { "type": "string", "minLength": 1 },
+            "secretKeyKey": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    }
+  }
+}

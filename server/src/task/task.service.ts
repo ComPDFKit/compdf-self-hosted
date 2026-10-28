@@ -22,6 +22,9 @@ import { PdfSdkClient, SdkFileResult } from '../clients/pdf-sdk.client';
 import { ConversionService, ConversionResult } from '../conversion/conversion.service';
 import { normalizeUploadedFilename, parseFilenameFromHeader, processedFilename, sanitizeFilename } from '../common/utils/filename';
 import { CreateTaskDto } from './task.dto';
+import { PDF_DECORATION_OPS } from '../pdf/decoration-validation';
+import { UpstreamSdkError } from '../common/errors/upstream-sdk.error';
+import { semanticErrorCodeForBizCode } from '../common/errors/error-codes';
 // The optional storageDir parameter lets tests avoid writing task results into
 // the runtime storage path.
 
@@ -192,10 +195,13 @@ export class TaskService {
     } catch (err) {
       const e = err as Error;
       this.logger.warn(`task ${taskId} failed: ${e.message}`);
+      const failureCode = dto.kind === 'pdf' && PDF_DECORATION_OPS.has(dto.op) && err instanceof UpstreamSdkError
+        ? semanticErrorCodeForBizCode(err.code, 'pdf') ?? 'UPSTREAM_ERROR'
+        : 'TASK_ERROR';
       await this.mysql.query(
         `UPDATE tasks SET status = 'failed', failure_code = ?, failure_reason = ?
          WHERE task_id = ? AND status IN ('pending', 'processing')`,
-        ['TASK_ERROR', e.message.slice(0, 1000), taskId],
+        [failureCode, e.message.slice(0, 1000), taskId],
       );
     }
   }
@@ -232,6 +238,10 @@ export class TaskService {
         case 'decrypt': return this.pdfSdk.decrypt(file, requestObj, token);
         case 'watermark/add': return this.pdfSdk.addWatermark(file, requestObj, token, files[1]);
         case 'watermark/remove': return this.pdfSdk.removeWatermark(file, requestObj, token);
+        case 'headers-footers/add': return this.pdfSdk.addHeadersFooters(file, requestObj, token);
+        case 'headers-footers/remove': return this.pdfSdk.removeHeadersFooters(file, requestObj, token);
+        case 'bates/add': return this.pdfSdk.addBates(file, requestObj, token);
+        case 'bates/remove': return this.pdfSdk.removeBates(file, requestObj, token);
         case 'pdfa': return this.pdfSdk.convertStandard(file, files[1], requestObj, token);
         case 'compress': return this.pdfSdk.compress(file, requestObj, token);
         case 'generation/html-to-pdf': return this.pdfSdk.htmlToPdf(file, requestObj, token);
@@ -264,7 +274,7 @@ function contentTypeOf(r: SdkFileResult | ConversionResult): string {
   return c ?? 'application/octet-stream';
 }
 function filenameOf(r: SdkFileResult | ConversionResult, dto: CreateTaskDto, files: Express.Multer.File[]): string | undefined {
-  if (dto.kind === 'pdf' && (dto.op === 'delete' || dto.op === 'compress')) {
+  if (dto.kind === 'pdf' && (dto.op === 'delete' || dto.op === 'compress' || PDF_DECORATION_OPS.has(dto.op))) {
     const request = dto.request ? safeJson(dto.request) : undefined;
     const explicit = stringOption(request, 'outputFileName');
     if (explicit) return explicit;

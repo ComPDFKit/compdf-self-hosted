@@ -14,10 +14,12 @@ import express from 'express';
 import { join } from 'path';
 import { AppModule } from './app.module';
 import { SystemLogService } from './dashboard/system-log.service';
+import { configureMcpHttp } from './mcp/mcp.http';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
+  configureMcpHttp(app);
 
   // CORS: permissive by default (origin: true). If CORS_ORIGINS is set to a
   // comma-separated list, restrict to those exact origins.

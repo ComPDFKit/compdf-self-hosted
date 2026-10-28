@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "version": "4.2.0",
+  "channel": "stable",
+  "status": "active",
+  "minimumVersion": "4.1.0",
+  "minimumUpdaterVersion": "0.1.0",
+  "releasedAt": "2026-09-15T00:00:00Z",
+  "expiresAt": "2026-12-15T00:00:00Z",
+  "maintenanceRequired": true,
+  "infraUpgradeRequired": false,
+  "images": {
+    "app": {
+      "name": "compdfkit/compdf-app",
+      "tag": "latest",
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "server": {
+      "name": "compdfkit/compdf-server",
+      "tag": "latest",
+      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  },
+  "migration": {
+    "from": "4.1.0",
+    "to": "4.2.0",
+    "required": false
+  },
+  "rollback": {
+    "application": true,
+    "database": false,
+    "requiresBackupRestore": false
+  },
+  "releaseNotes": "This fixture must fail because floating tags are forbidden.",
+  "knownIssues": []
+}

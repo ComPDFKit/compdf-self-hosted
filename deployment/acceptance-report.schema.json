@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.compdf.com/schemas/self-hosted/acceptance-report-v1.json",
+  "title": "ComPDF Self-Hosted acceptance report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "reportId",
+    "requestId",
+    "createdAt",
+    "environment",
+    "release",
+    "steps",
+    "samples",
+    "gaps",
+    "overall"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "reportId": { "$ref": "#/$defs/identifier" },
+    "requestId": { "$ref": "#/$defs/identifier" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "deploymentMode", "os", "architecture", "runtime"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "deploymentMode": {
+          "enum": ["compose", "kubernetes", "nginx-multinode", "binary", "offline"]
+        },
+        "os": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "architecture": { "enum": ["amd64", "arm64"] },
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "docker": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "compose": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "kubernetes": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "helm": { "type": "string", "minLength": 1, "maxLength": 128 }
+          },
+          "minProperties": 1
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "productVersion", "databaseSchemaVersion", "configSchemaVersion", "components"],
+      "properties": {
+        "commit": { "type": "string", "pattern": "^[a-f0-9]{7,40}$" },
+        "productVersion": { "$ref": "#/$defs/semver" },
+        "databaseSchemaVersion": { "$ref": "#/$defs/semver" },
+        "configSchemaVersion": { "type": "integer", "minimum": 1 },
+        "components": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/component" }
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/step" }
+    },
+    "samples": {
+      "type": "array",
+      "maxItems": 100,
+      "items": { "$ref": "#/$defs/sample" }
+    },
+    "artifacts": {
+      "type": "array",
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/artifact" }
+    },
+    "backup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backupId", "verificationStatus", "restoreStatus"],
+      "properties": {
+        "backupId": { "$ref": "#/$defs/identifier" },
+        "verificationStatus": { "enum": ["not_run", "passed", "failed"] },
+        "restoreStatus": { "enum": ["not_run", "passed", "failed"] }
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "maxItems": 200,
+      "items": { "type": "string", "minLength": 1, "maxLength": 2000 }
+    },
+    "overall": { "enum": ["passed", "failed", "blocked"] }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,160}$"
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "enum": ["server", "app", "infra", "updater"] },
+        "version": { "$ref": "#/$defs/semver" },
+        "imageDigest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "evidenceLevel", "status", "check", "startedAt", "completedAt", "exitCode", "summary"],
+      "properties": {
+        "id": { "$ref": "#/$defs/identifier" },
+        "evidenceLevel": { "enum": ["E0", "E1", "E2", "E3", "E4", "E5", "E6", "E7"] },
+        "status": { "enum": ["passed", "failed", "blocked", "not_run"] },
+        "check": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "completedAt": { "type": "string", "format": "date-time" },
+        "exitCode": {
+          "anyOf": [
+            { "type": "integer", "minimum": 0, "maximum": 255 },
+            { "type": "null" }
+          ]
+        },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 4000 }
+      }
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256", "assertions"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "assertions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": { "type": "string", "minLength": 1, "maxLength": 1000 }
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "sha256", "size"],
+      "properties": {
+        "name": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$", "maxLength": 512 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

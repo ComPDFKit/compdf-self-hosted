@@ -1,0 +1,27 @@
+[Unit]
+Description=ComPDF Self-Hosted Updater
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=compdf-updater
+ExecStartPre=/usr/local/sbin/compdfctl config validate --file /etc/compdf-updater/config.json
+ExecStart=/usr/local/sbin/compdf-updater --config /etc/compdf-updater/config.json --socket /run/compdf-updater/compdf-updater.sock
+RuntimeDirectory=compdf-updater
+RuntimeDirectoryMode=0750
+StateDirectory=compdf-updater
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/compdf-self-hosted /var/lib/compdf-updater /run/compdf-updater
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

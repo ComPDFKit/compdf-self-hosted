@@ -1,0 +1,42 @@
+# Overlay for the existing local stack; start with scripts/start-backend-dev.ps1.
+services:
+  compdf-server:
+    environment:
+      NODE_ENV: development
+      # Polling also detects edits through Windows Docker Desktop bind mounts.
+      TSC_WATCHFILE: DynamicPriorityPolling
+      TSC_WATCHDIRECTORY: DynamicPriorityPolling
+    volumes:
+      - ./server/src:/app/src:ro
+      - ./server/scripts:/app/scripts:ro
+      - ./server/package.json:/app/package.json:ro
+      - ./server/package-lock.json:/app/package-lock.json:ro
+      - ./server/tsconfig.json:/app/tsconfig.json:ro
+      - ./server/tsconfig.build.json:/app/tsconfig.build.json:ro
+      - ./server/nest-cli.json:/app/nest-cli.json:ro
+      - ./migrations:/app/release/migrations:ro
+      - ./release/version.json:/app/release/version.json:ro
+      - server-watch-node-modules:/app/node_modules
+      - server-watch-dist:/app/dist
+    command:
+      - sh
+      - -ec
+      - |
+        if ! command -v ps >/dev/null 2>&1; then
+          apt-get update
+          apt-get install -y --no-install-recommends procps
+        fi
+        lock_hash=$$(sha256sum package-lock.json | cut -d ' ' -f1)
+        marker=node_modules/.compdf-watch-package-lock
+        if [ ! -f "$$marker" ] || [ "$$(cat "$$marker")" != "$$lock_hash" ]; then
+          npm ci --include=dev --omit=optional --no-audit --no-fund
+          printf '%s' "$$lock_hash" > "$$marker"
+        fi
+        npm run init:db:dev
+        exec npm run start:dev
+    healthcheck:
+      start_period: 180s
+
+volumes:
+  server-watch-node-modules:
+  server-watch-dist:

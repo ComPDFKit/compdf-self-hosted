@@ -17,6 +17,11 @@ import mysql, {
   ExecuteValues,
 } from 'mysql2/promise';
 
+export interface MysqlTransaction {
+  query<T = RowDataPacket[]>(sql: string, params?: QueryValues): Promise<T>;
+  execute(sql: string, params?: ExecuteValues): Promise<ResultSetHeader>;
+}
+
 @Injectable()
 export class MysqlClient implements OnModuleDestroy {
   private readonly logger = new Logger(MysqlClient.name);
@@ -72,6 +77,39 @@ export class MysqlClient implements OnModuleDestroy {
     } catch (err) {
       this.logger.error(`execute failed: ${(err as Error).message} | sql=${sql}`);
       throw err;
+    }
+  }
+
+  /** All statements in the callback run on one connection and commit together. */
+  async transaction<T>(work: (db: MysqlTransaction) => Promise<T>): Promise<T> {
+    const connection = await this.pool.getConnection();
+    let reusable = true;
+    try {
+      await connection.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+      await connection.beginTransaction();
+      const db: MysqlTransaction = {
+        query: async <R>(sql: string, params: QueryValues = []): Promise<R> => {
+          const [rows] = await connection.query<RowDataPacket[]>(sql, params);
+          return rows as unknown as R;
+        },
+        execute: async (sql: string, params: ExecuteValues = []) => {
+          const [result] = await connection.execute<ResultSetHeader>(sql, params);
+          return result;
+        },
+      };
+      const result = await work(db);
+      await connection.commit();
+      return result;
+    } catch (err) {
+      try {
+        await connection.rollback();
+      } catch {
+        reusable = false;
+        connection.destroy();
+      }
+      throw err;
+    } finally {
+      if (reusable) connection.release();
     }
   }
 

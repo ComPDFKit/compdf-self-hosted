@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
-import { LogOut, ChevronDown, Home } from 'lucide-vue-next';
+import { LogOut, ChevronDown, Home, Menu } from 'lucide-vue-next';
 import { useAuthStore } from '@/stores/auth';
 import LangSwitch from '@/components/LangSwitch.vue';
 import {
@@ -27,12 +27,17 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const toolsEnabled = window.COMPDF_CONFIG?.compdfToolsEnabled !== false;
+const emit = defineEmits<{ toggleNavigation: [] }>();
 
 const logoutOpen = ref(false);
 
 const titleMap: Record<string, string> = {
   overview: 'nav.overview',
+  license: 'nav.licenseManagement',
+  'api-keys': 'nav.apiManagement',
+  mcp: 'nav.mcp',
   logs: 'nav.logs',
+  updates: 'nav.updates',
   account: 'nav.account',
   settings: 'nav.settings',
 };
@@ -49,24 +54,33 @@ async function confirmLogout() {
 
 <template>
   <header
-    class="h-[59px] bg-white border-b border-brand-outline-variant/50 sticky top-0 px-8 flex items-center justify-between z-30 select-none"
+    class="sticky top-0 z-30 flex h-[59px] items-center justify-between border-b border-brand-outline-variant/50 bg-white px-3 select-none sm:px-4 md:px-8"
   >
     <!-- Breadcrumb -->
-    <div class="flex items-center gap-2 text-xs text-brand-secondary">
+    <div class="flex min-w-0 items-center gap-2 text-xs text-brand-secondary">
+      <button
+        type="button"
+        class="flex h-9 w-9 shrink-0 items-center justify-center text-brand-on-surface md:hidden"
+        :aria-label="t('header.openNavigation')"
+        :title="t('header.openNavigation')"
+        @click="emit('toggleNavigation')"
+      >
+        <Menu :size="20" />
+      </button>
       <span>{{ t('header.console') }}</span>
       <span>/</span>
-      <span class="text-brand-on-surface-variant font-medium">{{ pageTitle }}</span>
+      <span class="truncate text-brand-on-surface-variant font-medium">{{ pageTitle }}</span>
     </div>
 
     <!-- Actions -->
-    <div class="flex items-center gap-4">
+    <div class="flex shrink-0 items-center gap-1 sm:gap-2 md:gap-4">
       <template v-if="toolsEnabled">
         <Button
           as="a"
           href="/"
           variant="outline"
           size="sm"
-          class="text-xs font-bold text-brand-primary border-slate-200 hover:border-brand-primary hover:bg-brand-surface-container-low bg-white gap-1.5 h-8"
+          class="hidden h-8 gap-1.5 border-slate-200 bg-white text-xs font-bold text-brand-primary hover:border-brand-primary hover:bg-brand-surface-container-low sm:inline-flex"
         >
           <Home :size="12" />
           <span>{{ t('header.demo') }}</span>

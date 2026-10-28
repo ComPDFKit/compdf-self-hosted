@@ -31,6 +31,7 @@ import { validateDeletePagesRequest, validateInsertFromPdfRequest } from '../pdf
 import { validateEncryptRequest } from '../pdf/encryption-validation';
 import { validateCompressRequest } from '../pdf/compression-validation';
 import { validatePdfImageOptions } from '../conversion/dpi-validation';
+import { parseDecorationRequest, PDF_DECORATION_OPS, validateDecorationRequest } from '../pdf/decoration-validation';
 
 @Controller('api/v1/task')
 @UseGuards(ApiKeyGuard)
@@ -58,6 +59,30 @@ export class TaskController {
     return this.create('pdf', `watermark/${action}`, dto, files, req);
   }
 
+  @Post('pdf/headers-footers/:action')
+  @HttpCode(202)
+  @UseInterceptors(taskFileFieldsInterceptor())
+  async createPdfHeadersFootersTask(
+    @Param('action') action: string,
+    @Body() dto: CreateTaskDto,
+    @UploadedFiles() files: TaskUploadFields,
+    @Req() req: Request,
+  ): Promise<{ taskId: string; status: 'pending' }> {
+    return this.create('pdf', `headers-footers/${action}`, dto, files, req);
+  }
+
+  @Post('pdf/bates/:action')
+  @HttpCode(202)
+  @UseInterceptors(taskFileFieldsInterceptor())
+  async createPdfBatesTask(
+    @Param('action') action: string,
+    @Body() dto: CreateTaskDto,
+    @UploadedFiles() files: TaskUploadFields,
+    @Req() req: Request,
+  ): Promise<{ taskId: string; status: 'pending' }> {
+    return this.create('pdf', `bates/${action}`, dto, files, req);
+  }
+
   @Post('pdf/generation/:operation')
   @HttpCode(202)
   @UseInterceptors(taskFileFieldsInterceptor())
@@ -82,6 +107,12 @@ export class TaskController {
   ): Promise<{ taskId: string; status: 'pending' }> {
     const taskDto = createTaskDtoFromPath(source, target, dto);
     const orderedFiles = collectTaskFiles(taskDto, files);
+    if (taskDto.kind === 'pdf' && PDF_DECORATION_OPS.has(taskDto.op)) {
+      if (!orderedFiles[0]?.buffer?.length) {
+        throw new BadRequestException({ code: 'FILE_REQUIRED', message: 'a nonempty file is required.' });
+      }
+      validateDecorationRequest(taskDto.op, parseDecorationRequest(taskDto.request));
+    }
     if (taskDto.kind === 'conversion' && taskDto.op === 'convert' && taskDto.target === 'png') {
       validatePdfImageOptions(parseOptions(taskDto.options));
     }
@@ -254,6 +285,7 @@ function createTaskDtoFromPath(source: string, target: string, body: CreateTaskD
 }
 
 const PDF_TASK_OPS = new Set([
+  ...PDF_DECORATION_OPS,
   'merge',
   'split',
   'extract',

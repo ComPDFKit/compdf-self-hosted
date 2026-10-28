@@ -1,6 +1,6 @@
 services:
   compdf-infra:
-    image: compdfkit/compdf-infra:1.0.0
+    image: ${COMPDF_INFRA_IMAGE:-compdfkit/compdf-infra:1.0.0}
     platform: ${COMPDF_IMAGE_PLATFORM:-linux/amd64}
     security_opt:
       - seccomp:unconfined
@@ -23,7 +23,7 @@ services:
       start_period: 120s
 
   compdf-app:
-    image: compdfkit/compdf-app:1.0.0
+    image: ${COMPDF_APP_IMAGE:-compdfkit/compdf-app:1.0.0}
     platform: ${COMPDF_IMAGE_PLATFORM:-linux/amd64}
     depends_on:
       compdf-infra:
@@ -32,14 +32,11 @@ services:
       - REDIS_URL=redis://compdf-infra:6379/0
       - MYSQL_HOST=compdf-infra
       - S3_ENDPOINT=http://compdf-infra:9000
-      - COMPDF_LICENSE_KEY=${COMPDF_LICENSE_KEY}
-      - COMPDFKIT_LICENSE=${COMPDF_LICENSE_KEY}
-    ports:
-      - "7000:7000"
-      - "7001:7001"
-      - "9903:9903"
+      - COMPDF_LICENSE_KEY=${COMPDF_LICENSE_KEY:-}
+      - COMPDFKIT_LICENSE=${COMPDF_LICENSE_KEY:-}
     volumes:
       - ./fonts/windows:/opt/compdf_sdk/fonts/windows:ro
+      - ./configs/app-license:/opt/compdf_sdk/license:ro
       - compdf_output:/tmp/compdf_output
       - compdf_pdf_data:/data
     restart: unless-stopped
@@ -54,11 +51,7 @@ services:
       start_period: 120s
 
   compdf-server:
-    image: compdfkit/compdf-server:1.0.0
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: production
+    image: ${COMPDF_SERVER_IMAGE:-compdfkit/compdf-server:1.1.0}
     ports:
       - "8080:8080"
     depends_on:
@@ -69,12 +62,25 @@ services:
     networks:
       - compdf-internal
     environment:
+      - COMPDF_VERSION=${COMPDF_VERSION:-1.1.0}
+      - COMPDF_DB_SCHEMA_VERSION=${COMPDF_DB_SCHEMA_VERSION:-1.1.0}
+      - COMPDF_UPDATE_BASE_URL=${COMPDF_UPDATE_BASE_URL:-https://raw.githubusercontent.com/ComPDFKit/compdf-self-hosted/updates/}
+      - COMPDF_UPDATE_CHANNEL=${COMPDF_UPDATE_CHANNEL:-stable}
+      - JWT_SECRET=${JWT_SECRET:-}
+      - API_KEY=${API_KEY:-}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - PDF_SDK_BASE_URL=${PDF_SDK_BASE_URL:-http://compdf-app:7001}
       - CONVERSION_BASE_URL=${CONVERSION_BASE_URL:-http://compdf-app:7000}
+      - MCP_ENABLED=${MCP_ENABLED:-true}
+      - MCP_PUBLIC_URL=${MCP_PUBLIC_URL:-http://localhost:8080/mcp}
+      - MCP_ALLOWED_HOSTS=${MCP_ALLOWED_HOSTS:-}
+      - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-}
+      - MCP_MAX_INLINE_FILE_BYTES=${MCP_MAX_INLINE_FILE_BYTES:-4194304}
     volumes:
       - ./configs:/app/configs
       - ./data/server-storage:/app/storage
     command: ["sh", "-c", "npm run init:db && npm run start"]
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/api/v1/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s

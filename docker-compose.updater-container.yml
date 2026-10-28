@@ -1,0 +1,42 @@
+# Alternative to the Linux host/systemd docker-compose.updater.yml overlay.
+services:
+  compdf-server:
+    environment:
+      COMPDF_UPDATER_SOCKET: /run/compdf-updater/compdf-updater.sock
+    volumes:
+      - compdf_updater_run:/run/compdf-updater:ro
+
+  compdf-updater:
+    image: ${COMPDF_UPDATER_IMAGE:-compdfkit/compdf-updater:1.1.0}
+    restart: unless-stopped
+    networks:
+      - compdf-internal
+    environment:
+      COMPDF_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME}
+      COMPDF_UPDATE_BASE_URL: ${COMPDF_UPDATE_BASE_URL:-https://raw.githubusercontent.com/ComPDFKit/compdf-self-hosted/updates/}
+      COMPDF_UPDATE_KEY_ID: ${COMPDF_UPDATE_KEY_ID:-}
+      COMPDF_UPDATE_PUBLIC_KEY: ${COMPDF_UPDATE_PUBLIC_KEY:-}
+      COMPDF_UPDATE_BEARER_TOKEN: ${COMPDF_UPDATE_BEARER_TOKEN:-}
+      COMPDF_UPDATE_CHANNEL: ${COMPDF_UPDATE_CHANNEL:-stable}
+      COMPDF_UPDATE_CHECK_INTERVAL_MINUTES: ${COMPDF_UPDATE_CHECK_INTERVAL_MINUTES:-0}
+      COMPDF_UPDATE_AUTO_DOWNLOAD: ${COMPDF_UPDATE_AUTO_DOWNLOAD:-false}
+      COMPDF_UPDATE_MYSQL_PASSWORD: ${COMPDF_UPDATE_MYSQL_PASSWORD:-compdfkit-pass-2026}
+      COMPDF_UPDATE_REGISTRY: ${COMPDF_UPDATE_REGISTRY:-}
+      COMPDF_UPDATE_REGISTRY_USERNAME: ${COMPDF_UPDATE_REGISTRY_USERNAME:-}
+      COMPDF_UPDATE_REGISTRY_PASSWORD: ${COMPDF_UPDATE_REGISTRY_PASSWORD:-}
+      DOCKER_CONFIG: /etc/compdf-updater/docker
+    volumes:
+      - .:/workspace
+      - ${COMPDF_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      - compdf_updater_run:/run/compdf-updater
+    tmpfs:
+      - /etc/compdf-updater:mode=0700
+    healthcheck:
+      test: ["CMD", "python3", "/usr/local/lib/compdf-updater/container.py", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  compdf_updater_run:

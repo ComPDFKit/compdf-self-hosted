@@ -40,6 +40,7 @@ const fileStatus = ref<string>('');
       <div class="detail-content">
         <StepTitle :tool-slug="slug" :from-type="fromType" :file-status="fileStatus" />
         <UploadPanel
+          :key="slug"
           :from-type="fromType"
           :to-type="toType"
           :mode="tool.multiple ? 'multiple' : 'single'"
@@ -78,8 +79,8 @@ const fileStatus = ref<string>('');
   background: #fbfcff;
 }
 .detail-content {
-  width: min(100%, 980px);
-  padding-top: 72px;
+  width: min(100%, 1340px);
+  padding-top: 48px;
 }
 .detail-breadcrumb {
   position: absolute;
@@ -107,6 +108,7 @@ const fileStatus = ref<string>('');
 }
 .detail-current {
   color: #0a0d1c;
+  font-weight: 600;
 }
 .not-found-panel {
   align-items: center;

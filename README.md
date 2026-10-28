@@ -1,256 +1,267 @@
 ![ComPDF Solutions](images/ComPDF-Comprehensive%20PDF%20Solutions.png)
 
-[English](README.md) | [繁體中文](README_TW.md) | [简体中文](README_CN.md)
+[English](README.md) | [简体中文](README_CN.md) | [繁體中文](README_TW.md)
 
-# ComPDF Self-Hosted — Open Source PDF Editor & PDF Converter
+# ComPDF Self-Hosted
 
-Part of the KDAN ecosystem, [ComPDF Self-Hosted](https://www.compdf.com/self-hosted-deployment?utm_source=github_ai_selfhosted_oldopen_en&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_en&ref_platform_id=github_compdf) offers PDF editing and document conversion, helping teams process PDFs, Office files, and images securely in private Docker deployments.
-
-
-
-> * If you find ComPDF Self-Hosted useful, please consider giving us a ⭐ **Star** on GitHub. It helps us grow and improve.
-> * Got questions or ideas? Join the conversation in our [Discussions](https://github.com/ComPDFKit/compdf-self-hosted/discussions).
-
-<p align="center">
-  <a href="#"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
-  <a href="#"><img src="https://img.shields.io/badge/docker-supported-blue" alt="Docker"></a>
-  <a href="#"><img src="https://img.shields.io/github/stars/ComPDFKit/compdf-self-hosted" alt="GitHub Stars"></a>
-  <a href="#"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs Welcome"></a>
-</p>
-
-<p align="center">
-    <a href="#features"><b>Features</b></a> •
-  <a href="#quick-start"><b>Quick Start</b></a> •
-  <a href="#architecture"><b>Architecture</b></a> •
-  <a href="#upgrade-to-enterprise"><b>Upgrade to Enterprise</b></a> •
-   <a href="#support"><b>support</b></a> •
-  <a href="#license"><b>License</b></a> •
-  <a href="https://www.compdf.com/contact-sales?utm_source=github_ai_sefhosted_oldopen_en&utm_medium=referral&utm_campaign=github_ai_sefhosted_oldopen_en&ref_platform_id=github_compdf_en" target="_blank"><b>Enterprise →</b></a>
-</p>
-
-## Why ComPDF Self-Hosted?
-
-Unlike traditional SDKs that require deep integration, ComPDF Self-Hosted is a ready-to-deploy open-source PDF processing platform. It combines PDF editing and conversion capabilities, while also supporting image format conversion—covering the full spectrum from documents to images. This enables enterprises to quickly establish a fully controllable, self-owned document center.
-
-### Key Advantages
-
-* Docker Compose deployment
-* Complete PDF tool center — edit, convert, merge, split
-* API key management and license management
-* Private deployment with enterprise-ready architecture
-* Commercial support and dedicated assistance available
-
-Whether you're building an internal document platform, document automation workflow, or enterprise PDF service, ComPDF Self-Hosted helps you get started in minutes.
+Self-hosted PDF editing, document conversion and batch processing, with a Web UI,
+administration Dashboard, REST APIs and MCP integration.
 
 ## Features
 
-![Tools](images/tools.png)
+- PDF tools: merge, split, rotate, insert/delete/extract pages, compress,
+  watermark, encrypt/decrypt, headers/footers and Bates numbers.
+- Document/image conversion: PDF, Office, HTML, text and supported image formats.
+  Actual capabilities depend on the App image and SDK license.
+- Batch uploads, per-file passwords, sequential processing, status, failed-file
+  retry and ZIP downloads.
+- Dashboard: usage overview, logs, API keys, account/branding settings, License
+  management and product updates.
+- MCP: authenticated Streamable HTTP tools for operation discovery and batches.
 
-### 1. PDF Tool Center
-
-ComPDF Self-Hosted provides a ready-to-use **open source PDF editor**, **open source PDF converter**, and **open source image converter** center directly accessible through a browser. 
-
-| Category        | Features                                                                                                                                                                                                                                                |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| PDF Editing     | Merge PDF, Split PDF, Rotate PDF, Insert Pages, Delete Pages, Extract Pages, Add Watermark, Remove Watermark, Encrypt PDF, Decrypt PDF                                                                                                                  |
-| PDF to Others   | PDF to Word, PDF to Excel, PDF to Slide, PDF to Image (PNG, JPG, JPEG, JPEG2000, BMP, TIFF, TGA, GIF, WEBP), PDF to HTML, PDF to TXT, PDF to CSV, PDF to RTF, PDF to JSON, PDF to SearchablePDF, PDF to OFD, PDF to Markdown, PDF To PDF/A|
-| Others to PDF   | Word to PDF, Excel to PDF, Slide to PDF, HTML to PDF, TXT to PDF, CSV to PDF, RTF to PDF, PNG to PDF                                                                                                                                                                               |
-| Image to Others | Image to Word, Image to Excel, Image to Slide, Image to HTML, Image to CSV, Image to TXT, Image to RTF, Images to JSON, Images to PDF                                                                                                                   |
-
-### 2. Dashboard Console
-
-ComPDF Self-Hosted provides a unified management console for viewing API Key details, API usage, and License status, as well as supporting operation log auditing, account management, and core system configuration.
+![PDF tools](images/tools.png)
 
 ![Dashboard](images/dashboard.png)
 
-* Overview Panel: Displays API Key details, API usage statistics, License scope, and usage status.
+## Installation
 
-* Operation Logs: Track, search, and export all the operation logs.
+All three methods below are supported. Allow at least **32 GB RAM** and storage
+for images, data and backups. Default Infra/App images target `linux/amd64`.
+Docker methods require Docker Engine/Desktop in Linux container mode and
+Compose v2 supporting `up --wait --wait-timeout`.
 
-* Account Management: Set the username and password.
+### Method 1: Standalone installer (no clone)
 
-* System Settings: Set the name, logo, and theme color of the system.
+On Linux, WSL or macOS, run in a writable directory. Bash, curl and Docker must
+already be installed; Git and Node.js are not required. The default directory is
+`./compdf-self-hosted`:
 
-<a id="quick-start"></a>
+```sh
+curl -fsSL https://raw.githubusercontent.com/ComPDFKit/compdf-self-hosted/main/deploy/install.sh | bash -s -- --prepare-only
+```
 
-## Quick Start
+To review the script first or choose an installation directory:
 
-### 1. Start with Docker Compose
+```sh
+curl -fsSL https://raw.githubusercontent.com/ComPDFKit/compdf-self-hosted/main/deploy/install.sh -o compdf-install.sh
+# Review the script; the current user needs write permission to /opt.
+bash compdf-install.sh --dir /opt/compdf --prepare-only
+```
 
-1. Clone the repository and enter the project directory:
+The installer resolves one source commit, downloads minimal deployment assets
+and creates configuration, font and data directories. `--prepare-only` prepares
+files for configuration without starting services; `--dry-run` prints the plan.
+Use `--ref` to select an existing release tag or source commit. Image tags come from the
+configuration; controlled deployments should use verified digests.
 
-```bash
-git clone https://github.com/ComPDF/compdf-self-hosted.git
+Place the issued trial or production license at
+`configs/app-license/license.xml` inside the installation directory before
+starting services. The directory is mounted into App automatically; the repository
+does not include a valid SDK license. Put authorized fonts in `fonts/windows/`.
+Fresh installs can import the directory containing `license.xml` with
+`--sdk-license-dir`; use `--fonts-dir` for fonts.
+
+From the parent of the default installation directory, run:
+
+```sh
+# Start services or apply the configured environment.
+bash ./compdf-self-hosted/install.sh install --dir ./compdf-self-hosted
+bash ./compdf-self-hosted/install.sh status --dir ./compdf-self-hosted
+bash ./compdf-self-hosted/install.sh logs --dir ./compdf-self-hosted
+# Stop services while preserving configuration and data.
+bash ./compdf-self-hosted/install.sh stop --dir ./compdf-self-hosted
+```
+
+For `/opt/compdf`, use `/opt/compdf/install.sh` and `--dir /opt/compdf`.
+Repeated installation preserves existing files/data and pulls configured images;
+it does not update deployment scripts or roll back the database. Use the saved
+installer commands to retain its Compose project identity. Back up the database,
+storage, configuration and licenses together before changing versions.
+
+### Method 2: Apple container
+
+Requires Apple Silicon, macOS 26+, Apple `container` 1.5.0, jq and curl. Default
+amd64 images require Rosetta. Select the Apple runtime in the same installer:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ComPDFKit/compdf-self-hosted/main/deploy/install.sh | bash -s -- --runtime apple --prepare-only
+```
+
+Place the issued license at `configs/app-license/license.xml` in the prepared
+directory, then run the `install` command below. The installer starts
+Infra → App → Server, checks health and injects dependency IP addresses.
+Configuration is saved in `.apple.env`; the default published endpoint is local
+`http://localhost:8080`. Later commands must include `--runtime apple`:
+
+```sh
+bash ./compdf-self-hosted/install.sh install --runtime apple --dir ./compdf-self-hosted
+bash ./compdf-self-hosted/install.sh status --runtime apple --dir ./compdf-self-hosted
+bash ./compdf-self-hosted/install.sh logs --runtime apple --dir ./compdf-self-hosted
+bash ./compdf-self-hosted/install.sh stop --runtime apple --dir ./compdf-self-hosted
+```
+
+Existing containers are not overwritten. Recreating them requires refreshing
+dependency IPs and preserving persistent volumes. This mode does not integrate
+the Docker Updater or supply an automatic restart daemon. After stopping services,
+recreate all three containers in dependency order to refresh their IPs. Read
+`PROJECT` from `.apple.env`, remove only that project's stopped containers with
+`container delete`, then run the saved install command again. Retain the network,
+named volumes and mounted configuration/storage directories.
+
+### Method 3: Manual Docker Compose
+
+For a complete checkout or custom Compose configuration:
+
+```sh
+git clone https://github.com/ComPDFKit/compdf-self-hosted.git
 cd compdf-self-hosted
-```
-
-2. Prepare the environment file before starting services:
-
-```bash
 cp .env.example .env
+mkdir -p configs/app-license fonts/windows data/server-storage
 ```
 
-`.env` includes a free License by default for local development, feature
-evaluation, and API verification. Docker Compose automatically loads `.env`
-from the project directory.
+Configure `.env`, image versions, issued licenses and fonts as described in
+Method 1, then start:
 
-3. Start the full stack:
-
-```bash
-docker compose up -d
+```sh
+docker compose --env-file .env config --quiet
+docker compose --env-file .env pull
+docker compose --env-file .env up -d --wait --wait-timeout 600
+docker compose --env-file .env ps
 ```
 
-4. Open ComPDF Web and Dashboard:
+Environment changes require `docker compose up -d` to recreate affected containers.
+Retain the original project name and persistent volumes. The base Compose publishes
+port 8080; it may listen on all host interfaces. Use `up` to create containers;
+`start` only resumes containers that already exist.
 
-```text
-ComPDF Web: http://localhost:8080/
-Dashboard:  http://localhost:8080/admin
+### Access and first configuration
+
+| Entry | Default address |
+| --- | --- |
+| ComPDF Web | `http://localhost:8080/` |
+| Dashboard | `http://localhost:8080/admin` |
+| Health | `http://localhost:8080/api/v1/status` |
+
+For a remote Docker host, replace `localhost` with its controlled endpoint.
+First initialization creates `admin / admin`; change the password after login.
+Configure HTTPS, CORS and access controls before external use. Keep issued
+credentials, fonts and runtime data out of Git.
+
+## Product updates: GitHub and Docker Hub
+
+Clients check this repository's signed stable channel. A higher published product
+version offers an update; an arbitrary source commit does not. After verification
+and administrator approval, Updater pulls immutable App/Server images from Docker
+Hub, backs up data, applies any declared migration, restarts services and verifies
+real PDF processing.
+
+Missing/unreachable or expired metadata does not confirm a successful
+latest-version check. Updater independently verifies signatures before installation.
+
+Dashboard product installation and online runtime XML License updates need the
+independent Updater. Set publisher-provided `COMPDF_UPDATE_KEY_ID` and Base64
+Ed25519 `COMPDF_UPDATE_PUBLIC_KEY` in `.env`. The default feed is this repository's
+`updates` branch. From a complete checkout, start published images with:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.updater-container.yml up -d --wait --wait-timeout 600
 ```
 
-The dashboard ships with a default administrator account on first deployment:
-`admin / admin`.
+Minimal Docker installations can download this overlay from their recorded source
+commit and retain their saved project name from `.compdf-install`. Run Compose
+with that project name, the environment file and both Compose files for later
+lifecycle commands. This Docker overlay is not supported by Apple container.
 
-To use an Enterprise license, replace `COMPDF_LICENSE_KEY` in `.env` with the
-issued License Key. Restart the services after updating the License Key.
+To build local source with Updater, use
+`docker compose -f docker-compose.full.yml up -d --build --wait --wait-timeout 600`.
+Installation always needs administrator confirmation. The application updater
+manages App/Server; Updater and Infra have separate deployment lifecycles.
+Both trust settings must be configured before starting Updater. Basic installation
+and local source development can run without it.
 
-**[Apply for the Enterprise version](https://www.compdf.com/contact-sales?utm_source=github_ai_sefhosted_oldopen_en&utm_medium=referral&utm_campaign=github_ai_sefhosted_oldopen_en&ref_platform_id=github_compdf_en) to obtain the following benefits:**
+Back up the database, storage, configuration and licenses before an upgrade.
+Do not delete persistent volumes or relabel an existing database's schema history.
+After an update, use `docker compose -f tmp/runtime-updater/docker-compose.json up -d`
+to restart business services with their installed versions; manage Updater with
+its original Compose configuration. Rebuilding older source can replace an
+installed update.
 
-* Watermark-free document processing
-* No limit on the number of document pages processed
-* Batch document processing
+Maintainers publish images and signed metadata using the manual **Publish release**
+workflow in [.github/workflows/release.yml](.github/workflows/release.yml).
+Configure its `release` environment with secrets `DOCKERHUB_USERNAME`,
+`DOCKERHUB_TOKEN`, `RELEASE_SIGNING_PRIVATE_KEY` (Base64-encoded 64-byte Ed25519
+private key), and variable `RELEASE_SIGNING_KEY_ID`. Distribute the matching
+32-byte Base64 public key and key ID to installations; keep the private key in
+the release environment. Align versions in `release/version.json`, create an
+immutable version tag, then run the workflow for that tag. It publishes Server/UI
+and Updater images and signs `stable/release.json` plus `stable/release.json.sig`
+on the `updates` branch. Pushing source alone does not create an update feed or
+Docker Hub tags.
 
-### 2. Start the development environment
+## Runtime and source layout
 
-Development uses Docker for the infra and SDK services, while the server and
-Web UI can run locally for hot reload.
+Infra supplies MySQL, Redis and object storage. App runs the PDF/conversion SDK.
+Server provides APIs, batch/MCP logic and the packaged UI. Optional Updater manages
+approved updates. Commercial SDK source is not included.
 
-Start the development stack:
+| Path | Purpose |
+| --- | --- |
+| `frontend/compdf-web/` | Vue 3 + Vite UI and Dashboard |
+| `server/` | NestJS + TypeScript backend |
+| `updater/` | Go updater/publisher and container bootstrap |
+| `deploy/`, `helm/` | Canonical deployment assets |
+| `deployment/`, `release/`, `migrations/` | Contracts, versions and forward upgrades |
+| `configs/` | Settings and initial database schema |
+| `tests/fixtures/` | Synthetic test samples; never release data |
 
-```bash
+## Source development
+
+Use Node.js 24 and npm; Server and UI have separate packages and lock files.
+
+```sh
+test -f .env || cp .env.example .env
 docker compose -f docker-compose.dev.yml up -d --build compdf-infra compdf-app compdf-server
 ```
 
-Open ComPDF Web and Dashboard:
+In a separate terminal:
 
-```bash
+```sh
 cd frontend/compdf-web
-npm install
+npm ci
 npm run dev
 ```
 
-Development URLs:
+Frontend is `http://localhost:5173`, backend `http://localhost:8080`. Development
+exposes additional SDK/database ports; use an isolated environment. Windows users
+with an existing local stack can use `scripts/start-backend-dev.ps1` for watch
+mode.
 
-```text
-ComPDF Web: http://localhost:5173/
-Dashboard:  http://localhost:5173/admin
-Server API: http://localhost:8080/api/v1/
+To build and deploy the Server/UI image from a complete source checkout:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build compdf-infra compdf-app compdf-server
 ```
 
-You can also view the [Documentation](https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview?utm_source=github_ai_sefhosted_oldopen_en&utm_medium=referral&utm_campaign=github_ai_sefhosted_oldopen_en&ref_platform_id=github_compdf_en).
+App and Infra still use their configured images. These source commands are for
+the complete repository, not the minimal directory created by the installer.
 
-### 3. Check status and logs
+## Other deployment assets
 
-```bash
-docker compose -f docker-compose.dev.yml ps
-docker compose -f docker-compose.dev.yml logs -f compdf-infra compdf-app
-```
+| Option | Purpose | Files |
+| --- | --- | --- |
+| Kubernetes / Helm | Cluster deployment using the bundled chart | [Chart](helm/compdf-self-hosted/) |
+| Source / binary | Controlled Linux Server/UI deployment; App/Infra remain separate | [Packaging scripts](deploy/binary/) |
+| Nginx / Keepalived | TLS and entrypoint availability; application/data HA needs separate design | [Configuration](deploy/nginx/) |
+| Offline delivery | Image export and signed offline packages | [Offline tools](deploy/offline/) |
 
-The production deployment stores persistent data in Docker volumes and mounts `./configs` into the server container.
+Nginx is an entrypoint layer; online/offline describes delivery. These options
+can accompany Compose or Kubernetes. Compose Updater does not manage Kubernetes
+or Apple container.
 
-### 4. Build the production image from source
+## License and support
 
-Keep this path when you have changed the local source code and need to package a new production `compdf-server` image from the root `Dockerfile`. The Dockerfile builds ComPDF Web and Dashboard from `frontend/compdf-web`, copies the static assets into `/app/public/compdf-web`, builds the server, and serves pages and APIs together on port `8080`.
-
-```bash
-docker compose -f docker-compose.yml up -d --build compdf-infra compdf-app compdf-server
-```
-
-All features above come with [ComPDF](https://www.compdf.com/?utm_source=github_ai_sefhosted_oldopen_en&utm_medium=referral&utm_campaign=github_ai_sefhosted_oldopen_en&ref_platform_id=github_compdf_en) — check them out [here](https://www.compdf.com/pdf-tools?utm_source=github_ai_sefhosted_oldopen_en&utm_medium=referral&utm_campaign=github_ai_sefhosted_oldopen_en&ref_platform_id=github_compdf_en).
-
-<a id="architecture"></a>
-
-## Architecture
-
-```text
-┌────────────────────────────────────────────────────────────────────┐
-│                              Browser                               │
-│        Use / for ComPDF Web and /admin for Dashboard in production │
-└───────────────────────────────┬────────────────────────────────────┘
-                                │
-                                │ HTML/CSS/JS + HTTP /api/v1/*
-                                ▼
-┌────────────────────────────────────────────────────────────────────┐
-│                       compdf-server container                      │
-│          ComPDF Web + Dashboard + Server, port 8080                │
-├────────────────────────────────────────────────────────────────────┤
-│ - Serves ComPDF Web and Dashboard from /app/public/compdf-web      │
-│ - ComPDF Web uses /api/v1/process/* and /api/v1/task/*             │
-│ - Dashboard uses /api/v1/dashboard/* for API keys, license, logs   │
-│   and system settings                                              │
-│ - Orchestrates async task status, cancellation, and downloads      │
-│ - Injects brand config, API key, and display-only license metadata │
-│ - Normalizes processing-service errors and writes operation logs   │
-└───────────────┬───────────────────────────────┬────────────────────┘
-                │                               │
-                │ HTTP                          │ MySQL / Redis
-                ▼                               ▼
-┌────────────────────────────────┐  ┌────────────────────────────────┐
-│ compdf-app container           │  │ compdf-infra container         │
-│                                │  │ MySQL 8 + Redis 7 + RustFS     │
-│                                │  │ persistent Docker volumes      │
-└────────────────────────────────┘  └────────────────────────────────┘
-                │
-                ▼
-┌────────────────────────────────────────────────────────────────────┐
-│                         Project-mounted data                       │
-├────────────────────────────────────────────────────────────────────┤
-│ configs/: license.jwt, settings.yml, init.sql                      │
-│ storage/: async task result files                                  │
-│ fonts/: optional fonts mounted into the SDK container              │
-└────────────────────────────────────────────────────────────────────┘
-```
-
-In local development, `compdf-infra`, `compdf-app`, and `compdf-server` all run
-through `docker-compose.dev.yml` so the service-to-service connections stay
-consistent with the deployment topology.
-
-## Upgrade to Enterprise
-
-[Contact sales](https://www.compdf.com/contact-sales?utm_source=github_ai_sefhosted_oldopen_en&utm_medium=referral&utm_campaign=github_ai_sefhosted_oldopen_en&ref_platform_id=github_compdf_en) to update to the **Enterprise Edition**.
-
-| Feature               | Free Edition | Enterprise |
-| --------------------- | ------------ | ---------- |
-| PDF Editing           | ✅            | ✅          |
-| PDF Conversion        | ✅            | ✅          |
-| Web UI                | ✅            | ✅          |
-| Dashboard             | ✅            | ✅          |
-| Watermark-Free Output | ❌            | ✅          |
-| Unlimited Pages       | ❌            | ✅          |
-| Custom Concurrency    | ❌            | ✅          |
-| Commercial License    | ❌            | ✅          |
-| Technical Support     | ❌            | ✅          |
-
-## Documentation
-
-- SDK Documentation: [https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview](https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview?utm_source=github_ai_sefhosted_oldopen_en&utm_medium=referral&utm_campaign=github_ai_sefhosted_oldopen_en&ref_platform_id=github_compdf_en)
-
-- API Reference: [https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/api-reference-conversion](https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/api-reference-conversion?utm_source=github_ai_sefhosted_oldopen_en&utm_medium=referral&utm_campaign=github_ai_sefhosted_oldopen_en&ref_platform_id=github_compdf_en)
-
-## Support
-
-Have suggestions? [Start a discussion](https://github.com/ComPDFKit/compdf-self-hosted/discussions). If you find **ComPDF Self-Hosted** useful, please consider giving us a ⭐ **Star** on GitHub. It helps us grow and improve.
-
-## License
-
-- This project is licensed under the MIT License. See the LICENSE file for details.
-
-- [Contact Sales](https://www.compdf.com/contact-sales?utm_source=github_ai_sefhosted_oldopen_en&utm_medium=referral&utm_campaign=github_ai_sefhosted_oldopen_en&ref_platform_id=github_compdf_en) for the Commercial / Enterprise licenses for ComPDF Self-Hosted.
-
----
-
-<p align="center">
-  <b>Built by the ComPDF team.</b><br>
-  <a href="https://compdf.com?utm_source=github_ai_sefhosted_oldopen_en&utm_medium=referral&utm_campaign=github_ai_sefhosted_oldopen_en&ref_platform_id=github_compdf_en">Website</a> ·
-  <a href="https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview?utm_source=github_ai_sefhosted_oldopen_en&utm_medium=referral&utm_campaign=github_ai_sefhosted_oldopen_en&ref_platform_id=github_compdf_en">Docs</a> ·
-  <a href="https://www.compdf.com/contact-sales?utm_source=github_ai_sefhosted_oldopen_en&utm_medium=referral&utm_campaign=github_ai_sefhosted_oldopen_en&ref_platform_id=github_compdf_en">Enterprise Inquiries</a>
-</p>
+Repository code uses the [MIT License](LICENSE). Commercial PDF/Conversion SDKs,
+valid runtime licenses and customer fonts are provided separately. Visit
+[ComPDF](https://www.compdf.com/self-hosted-deployment) or
+[contact sales](https://www.compdf.com/contact-sales) for product/enterprise support.
+Report code issues through [GitHub Issues](https://github.com/ComPDFKit/compdf-self-hosted/issues).

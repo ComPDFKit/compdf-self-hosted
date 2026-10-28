@@ -1,15 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Cross2Icon } from '@radix-icons/vue';
 import { TOOL_SECTIONS } from '@/config/convert-map';
 import { SECTION_KEYS } from '@/config/i18n-keys';
 import ToolCard from '@/components/ToolCard.vue';
-import { useBrandStore } from '@/stores/brand';
-import bannerImage from '@/assets/banner.png';
 const { t } = useI18n();
-const brand = useBrandStore();
-const isDemoBannerVisible = ref(true);
 </script>
 
 <template>
@@ -25,26 +19,7 @@ const isDemoBannerVisible = ref(true);
       </section>
     </div>
   </main>
-  <aside
-    v-if="isDemoBannerVisible && !brand.c.isFormalLicense"
-    class="demo-banner demo-banner--fixed"
-    data-test="demo-banner"
-    :style="{ backgroundImage: `url(${bannerImage})` }"
-  >
-    <div class="demo-banner-content">
-      <p>{{ brand.c.upgradeBannerText ?? t('demoBanner.title') }}</p>
-      <a :href="brand.c.contactUrl ?? 'https://www.compdf.com/contact-sales'" target="_blank" rel="noopener">{{ t('demoBanner.upgrade') }}</a>
-    </div>
-    <button
-      class="demo-banner-close"
-      data-test="demo-banner-close"
-      type="button"
-      :aria-label="t('demoBanner.closeLabel')"
-      @click="isDemoBannerVisible = false"
-    >
-      <Cross2Icon aria-hidden="true" />
-    </button>
-  </aside>
+
 </template>
 
 <style scoped>

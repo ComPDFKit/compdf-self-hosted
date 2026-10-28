@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "composeProject": "compdf-self-hosted",
+  "workingDirectory": "/opt/compdf-self-hosted",
+  "composeFile": "/opt/compdf-self-hosted/docker-compose.yml",
+  "stateDirectory": "/var/lib/compdf-updater",
+  "backupDirectory": "/var/lib/compdf-updater/backups",
+  "databasePasswordFile": "/etc/compdf-updater/mysql-password",
+  "releaseBaseUrl": "https://raw.githubusercontent.com/ComPDFKit/compdf-self-hosted/updates/",
+  "serverBaseUrl": "http://127.0.0.1:8080",
+  "minimumFreeBytes": 5368709120,
+  "channel": "stable",
+  "automation": {
+    "checkIntervalMinutes": 360,
+    "jitterPercent": 20,
+    "maximumBackoffMinutes": 1440,
+    "autoDownload": false,
+    "retainReleases": 2,
+    "downloadBytesPerSecond": 0
+  },
+  "trustedKeys": {
+    "<RELEASE_KEY_ID>": "<BASE64_ED25519_PUBLIC_KEY>"
+  },
+  "allowedServices": [
+    "compdf-app",
+    "compdf-server"
+  ]
+}

@@ -14,8 +14,10 @@
  * app verifies on the next upstream call (architecture §5/§8.1). No limit fields,
  * no enforcement, ever.
  */
-import { BadRequestException, Controller, Get, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Controller, Get, NotFoundException, Post, Res, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import type { Response } from 'express';
+import { existsSync } from 'fs';
 import { writeFileSync } from 'fs';
 import { LicenseTokenService, LicenseDisplay } from './license-token.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -27,6 +29,14 @@ export class LicenseController {
   @Get()
   display(): LicenseDisplay {
     return this.licenseToken.decodeForDisplay();
+  }
+
+  @Get('download')
+  @UseGuards(JwtAuthGuard)
+  download(@Res() res: Response): void {
+    const path = this.licenseToken.resolveRuntimeLicensePath();
+    if (!existsSync(path)) throw new NotFoundException({ code: 'NOT_FOUND', message: 'runtime license file not found' });
+    res.download(path, 'license.xml');
   }
 
   @Post('upload')

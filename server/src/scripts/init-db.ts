@@ -3,17 +3,19 @@
  *
  * Flow:
  *   1. Wait for MySQL, retrying 30 times with a 1s delay.
- *   2. Apply ${INIT_SQL_PATH:-/configs/init.sql}; the SQL is idempotent.
+ *   2. Apply ${INIT_SQL_PATH:-/configs/init.sql} only when the database has no
+ *      schema_migrations baseline, even if the infrastructure already created
+ *      the empty tracking table. Versioned databases are checked, not altered.
  *   3. Provision the API key: if API_KEY env is set, install that exact key
  *      (idempotent by sha256 hash); otherwise seed a random key on first boot
  *      and persist its plaintext for Web auto-injection. Once an active API key
  *      exists, this script will not auto-generate another one.
  *
- * The first admin is NOT seeded here — it is created interactively via the
- * default Dashboard admin account is seeded here on first boot.
+ * The default Dashboard admin account is seeded here on first boot.
  * Re-running does not duplicate seed data or overwrite existing credentials.
  * The script runs only when executed directly; importing it is side-effect free.
  */
+import { createHash } from 'crypto';
 import { createPool, Pool } from 'mysql2/promise';
 import { existsSync, readFileSync, writeFileSync, chmodSync, mkdirSync, readdirSync } from 'fs';
 import { join } from 'path';
@@ -22,6 +24,7 @@ import { ADMIN_PASSWORD, ADMIN_USERNAME, genApiKey, hashApiKey, hashPassword } f
 const MAX_RETRIES = 30;
 const RETRY_DELAY_MS = 1000;
 const PLAINTEXT_FILENAME = '.api-key-plaintext';
+const DEFAULT_DATABASE_SCHEMA_VERSION = '1.1.0';
 
 interface PoolLike {
   query: <T = unknown>(sql: string, params?: unknown[]) => Promise<[T, unknown]>;
@@ -42,6 +45,86 @@ export interface EnsureDefaultAdminResult {
   username: string;
   password: string;
   inserted: boolean;
+}
+
+/** Register the schema version represented by init.sql without rewriting history. */
+export async function ensureSchemaBaseline(
+  pool: PoolLike,
+  version = process.env.COMPDF_DB_SCHEMA_VERSION ?? DEFAULT_DATABASE_SCHEMA_VERSION,
+  baselineSql = '',
+): Promise<void> {
+  assertSchemaVersion(version);
+  // A fresh-schema baseline is not the SQL migration that ends at this version.
+  const checksum = `baseline:${createHash('sha256').update(baselineSql).digest('hex')}`;
+  await pool.execute(
+    `INSERT INTO schema_migrations (version, checksum)
+     VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE version = version`,
+    [version, checksum],
+  );
+}
+
+export async function initializeSchema(
+  pool: PoolLike,
+  baselineSql: string,
+  targetVersion = process.env.COMPDF_DB_SCHEMA_VERSION ?? DEFAULT_DATABASE_SCHEMA_VERSION,
+): Promise<'initialized' | 'verified'> {
+  assertSchemaVersion(targetVersion);
+  const [tables] = await pool.query<Array<{ c: number }>>(
+    `SELECT COUNT(*) AS c
+     FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'schema_migrations'`,
+  );
+
+  const hasMigrationTable = Number(tables[0]?.c ?? 0) > 0;
+  const [rows] = hasMigrationTable
+    ? await pool.query<Array<{ version: string }>>('SELECT version FROM schema_migrations')
+    : [[]];
+
+  // Infrastructure images can pre-create the tracking table without recording
+  // a Server baseline. Treat that database as unversioned, just like a database
+  // without the table; only recorded versions prevent replaying bootstrap SQL.
+  if (rows.length === 0) {
+    assertDatabaseAgnosticBaseline(baselineSql);
+    await pool.query(baselineSql);
+    await ensureApiKeyOwnershipSchema(pool);
+    await ensureSchemaBaseline(pool, targetVersion, baselineSql);
+    return 'initialized';
+  }
+
+  for (const row of rows) assertSchemaVersion(row.version);
+  const currentVersion = rows.map((row) => row.version).sort(compareSchemaVersions).at(-1)!;
+  if (currentVersion !== targetVersion) {
+    throw new Error(
+      `database schema ${currentVersion} does not match target ${targetVersion}; run npm run migrate:db`,
+    );
+  }
+  return 'verified';
+}
+
+/** The connection's DATABASE_NAME is authoritative; baseline SQL must not override it. */
+export function assertDatabaseAgnosticBaseline(baselineSql: string): void {
+  const executableSql = baselineSql.replace(/^\s*--.*$/gm, '');
+  if (/(?:^|;)\s*(?:CREATE\s+(?:DATABASE|SCHEMA)|USE\s+)/im.test(executableSql)) {
+    throw new Error(
+      'init.sql must not create or select a database; configure DATABASE_NAME and provision that database before startup',
+    );
+  }
+}
+
+function assertSchemaVersion(version: string): void {
+  if (!/^\d+\.\d+\.\d+$/.test(version)) {
+    throw new Error(`invalid COMPDF_DB_SCHEMA_VERSION: ${version}`);
+  }
+}
+
+function compareSchemaVersions(left: string, right: string): number {
+  const a = left.split('.').map(Number);
+  const b = right.split('.').map(Number);
+  for (let index = 0; index < 3; index++) {
+    if (a[index] !== b[index]) return a[index] - b[index];
+  }
+  return 0;
 }
 
 /** Add the API key creator column for deployments created before ownership tracking. */
@@ -269,9 +352,8 @@ async function run(): Promise<void> {
       throw new Error(`init.sql not found at ${sqlPath}`);
     }
     const sql = readFileSync(sqlPath, 'utf8');
-    await p.query(sql);
-    await ensureApiKeyOwnershipSchema(p as unknown as PoolLike);
-    console.log('[init-db] schema applied (idempotent)');
+    const schemaResult = await initializeSchema(p as unknown as PoolLike, sql);
+    console.log(`[init-db] schema ${schemaResult}`);
 
     const admin = await ensureDefaultAdmin(p as unknown as PoolLike);
     if (admin.inserted) {

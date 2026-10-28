@@ -30,6 +30,23 @@ export default () => {
     publicDir: process.env.PUBLIC_DIR ?? join(process.cwd(), 'public'),
     settings: { path: process.env.SETTINGS_PATH ?? join(process.cwd(), 'configs/settings.yml') },
     storageDir,
+    mcp: {
+      enabled: process.env.MCP_ENABLED?.trim().toLowerCase() !== 'false',
+      publicUrl: process.env.MCP_PUBLIC_URL?.trim() || '',
+      allowedHosts: (process.env.MCP_ALLOWED_HOSTS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+      allowedOrigins: (process.env.MCP_ALLOWED_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+      maxInlineFileBytes: Math.min(parsePositiveInt(process.env.MCP_MAX_INLINE_FILE_BYTES, 4 * 1024 * 1024), 4 * 1024 * 1024),
+    },
+    batch: {
+      maxFileBytes: parsePositiveInt(process.env.BATCH_MAX_FILE_BYTES, 100 * 1024 * 1024),
+      maxFiles: parsePositiveInt(process.env.BATCH_MAX_FILES, 100),
+      maxTotalBytes: parsePositiveInt(process.env.BATCH_MAX_TOTAL_BYTES, 1024 * 1024 * 1024),
+      retentionDays: parsePositiveInt(process.env.BATCH_RETENTION_DAYS, 7),
+      workerPollMs: parsePositiveInt(process.env.BATCH_WORKER_POLL_MS, 1000),
+    },
+    updater: {
+      socketPath: process.env.COMPDF_UPDATER_SOCKET ?? '/run/compdf-updater/compdf-updater.sock',
+    },
     cors: {
       // '*' (default) = permissive, current behavior. Comma-separated list to restrict.
       origins: (process.env.CORS_ORIGINS ?? '*')
@@ -44,6 +61,11 @@ export default () => {
     },
   };
 };
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 const JWT_SECRET_FILE = '.dashboard-jwt-secret';
 const SERVER_INSTANCE_FILE = '.dashboard-server-instance';

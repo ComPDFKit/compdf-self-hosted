@@ -54,6 +54,8 @@ export const CONVERSION_FEATURES: Record<string, ConversionFeatures> = {
   'pdf/encrypt': { encryptOptions: true },
   'pdf/decrypt': { password: true },
   'pdf/pdfa': { password: true, standardOptions: true },
+  'pdf/headers-footers/add': {}, 'pdf/headers-footers/remove': {},
+  'pdf/bates/add': {}, 'pdf/bates/remove': {},
   'docx/pdf': {}, 'xlsx/pdf': {}, 'pptx/pdf': {}, 'html/pdf': {}, 'png/pdf': {}, 'txt/pdf': {}, 'csv/pdf': {}, 'rtf/pdf': {},
   'img/docx': { allowOcr: true }, 'img/xlsx': { allowOcr: true }, 'img/pptx': { allowOcr: true },
   'img/pdf': { allowOcr: true }, 'img/txt': { allowOcr: true }, 'img/json': { allowOcr: true },
@@ -80,6 +82,7 @@ export interface UploadParameter {
   imgDpi: number;
   rotateAngle: string;
   insertActionType: 'BLANK' | 'FROM_PDF';
+  insertPageSize: 'a4' | 'a3' | 'legal' | 'custom';
   insertIndex: string; insertCount: string; insertWidth: string; insertHeight: string; insertTargetPassword: string; sourcePages: string;
   compressQuality: 'low' | 'medium' | 'high' | 'custom';
   compressCustomFlags: string[]; compressImageQuality: string;
@@ -122,7 +125,7 @@ export interface UploadParameter {
 export function defaultParameter(): UploadParameter {
   return {
     pageRanges: '', outputFileName: '', outputTitle: '', outputLanguage: 'unspecified', pdfStandard: 'pdfa1a', imgDpi: 144, rotateAngle: '90',
-    insertActionType: 'BLANK', insertIndex: '1', insertCount: '1', insertWidth: '595', insertHeight: '842', insertTargetPassword: '', sourcePages: '',
+    insertActionType: 'BLANK', insertPageSize: 'a4', insertIndex: '1', insertCount: '1', insertWidth: '595', insertHeight: '842', insertTargetPassword: '', sourcePages: '',
     compressQuality: 'medium', compressCustomFlags: [], compressImageQuality: '80',
     watermarkType: 'text', watermarkFullScreen: false,
     watermarkText: '', watermarkFontSize: '', watermarkFontColor: '',

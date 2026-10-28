@@ -5,7 +5,8 @@ import { useI18n } from 'vue-i18n';
 import { useAuthStore } from '@/stores/auth';
 import { useBrandStore } from '@/stores/brand';
 import { useSetupStore } from '@/stores/setup';
-import { User, Lock, ArrowRight, Info } from 'lucide-vue-next';
+import { User, Lock, ArrowRight, Info, RefreshCw } from 'lucide-vue-next';
+import { loadPendingUpdateOperation } from '@/config/update-recovery';
 
 const { t } = useI18n();
 const route = useRoute();
@@ -19,6 +20,7 @@ const password = ref('');
 const loading = ref(false);
 const errorMsg = ref('');
 const showDefaultHint = ref(false);
+const pendingUpdateOperation = loadPendingUpdateOperation();
 
 const redirect = computed(() => (route.query.redirect as string) || '/admin');
 
@@ -69,6 +71,12 @@ async function submit() {
 
       <!-- Form -->
       <form @submit.prevent="submit" class="p-8 space-y-5 text-xs font-sans">
+        <div v-if="pendingUpdateOperation" class="border-l-4 border-blue-600 bg-blue-50 px-4 py-3 text-blue-950">
+          <div class="flex items-start gap-2">
+            <RefreshCw :size="14" class="mt-0.5 shrink-0" />
+            <p class="leading-5">{{ t('updates.reauthRequired') }}</p>
+          </div>
+        </div>
         <div
           v-if="showDefaultHint"
           data-test="default-login-hint"

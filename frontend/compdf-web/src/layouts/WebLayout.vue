@@ -9,6 +9,14 @@ import AppHeader from '@/components/AppHeader.vue';
 </script>
 
 <template>
-  <AppHeader />
-  <RouterView />
+  <div class="page">
+    <AppHeader />
+    <RouterView />
+  </div>
 </template>
+
+<style scoped>
+.page {
+  min-width: 1280px;
+}
+</style>

@@ -15,6 +15,8 @@ import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import FormData from 'form-data';
 import { decodeUpstreamError, UpstreamSdkError } from '../common/errors/upstream-sdk.error';
 import { normalizeUploadedFilename } from '../common/utils/filename';
+import { validateDecorationRequest } from '../pdf/decoration-validation';
+import { buildSplitRanges, parseSplitPageCount, validateSplitRequest } from '../pdf/split-request';
 
 /** Minimal multer-file shape the client needs (works with @UploadedFile). */
 export interface MulterFile {
@@ -27,6 +29,14 @@ export interface MulterFile {
 export interface SdkFileResult {
   buffer: Buffer;
   headers: Record<string, string>;
+}
+
+export interface HeaderFooterConfiguration {
+  headerFooter: Record<string, unknown> | null;
+}
+
+export interface BatesConfiguration {
+  bates: Record<string, unknown> | null;
 }
 
 interface InternalPart {
@@ -60,9 +70,17 @@ export class PdfSdkClient {
     );
   }
 
-  /** POST /v1/sync/pages/split — `file`, request.ranges[]. */
-  split(file: MulterFile, request: Record<string, unknown>, token: string): Promise<SdkFileResult> {
-    return this.callSync('/v1/sync/pages/split', [toPart('file', file)], request, token);
+  /** Resolve public every/equal options to SDK-native, 1-based ranges[]. */
+  async split(file: MulterFile, request: Record<string, unknown>, token: string): Promise<SdkFileResult> {
+    const dynamic = validateSplitRequest(request);
+    const parts = [toPart('file', file)];
+    if (!dynamic) return this.callSync('/v1/sync/pages/split', parts, request, token);
+
+    const infoRequest = Object.hasOwn(request, 'password') ? { password: request.password } : {};
+    const info = await this.callSync('/v1/sync/documents/info', parts, infoRequest, token);
+    const ranges = buildSplitRanges(dynamic, parseSplitPageCount(info.buffer));
+    const sdkRequest = stripRequestKeys(request, ['splitMode', 'splitCount']);
+    return this.callSync('/v1/sync/pages/split', parts, { ...sdkRequest, ranges }, token);
   }
 
   /** POST /v1/sync/pages/extract — `file`. */
@@ -129,6 +147,61 @@ export class PdfSdkClient {
   /** POST /v1/sync/watermarks/remove — `file`. */
   removeWatermark(file: MulterFile, request: Record<string, unknown>, token: string): Promise<SdkFileResult> {
     return this.callSync('/v1/sync/watermarks/remove', [toPart('file', file)], normalizeRemoveWatermarkRequest(request), token);
+  }
+
+  // ---- Headers / Footers / Bates ------------------------------------------
+
+  addHeadersFooters(file: MulterFile, request: Record<string, unknown>, token: string): Promise<SdkFileResult> {
+    validateDecorationRequest('headers-footers/add', request);
+    return this.callSync('/v1/sync/headers-footers/add', [toPart('file', file)], request, token);
+  }
+
+  removeHeadersFooters(file: MulterFile, request: Record<string, unknown>, token: string): Promise<SdkFileResult> {
+    validateDecorationRequest('headers-footers/remove', request);
+    return this.callSync('/v1/sync/headers-footers/remove', [toPart('file', file)], request, token);
+  }
+
+  addBates(file: MulterFile, request: Record<string, unknown>, token: string): Promise<SdkFileResult> {
+    validateDecorationRequest('bates/add', request);
+    return this.callSync('/v1/sync/bates/add', [toPart('file', file)], request, token);
+  }
+
+  removeBates(file: MulterFile, request: Record<string, unknown>, token: string): Promise<SdkFileResult> {
+    validateDecorationRequest('bates/remove', request);
+    return this.callSync('/v1/sync/bates/remove', [toPart('file', file)], request, token);
+  }
+
+  async readHeadersFooters(file: MulterFile, request: Record<string, unknown>, token: string): Promise<HeaderFooterConfiguration> {
+    return { headerFooter: await this.readConfiguration('headers-footers', 'headerFooter', file, request, token) };
+  }
+
+  async readBates(file: MulterFile, request: Record<string, unknown>, token: string): Promise<BatesConfiguration> {
+    return { bates: await this.readConfiguration('bates', 'bates', file, request, token) };
+  }
+
+  private async readConfiguration(
+    resource: 'headers-footers' | 'bates',
+    field: 'headerFooter' | 'bates',
+    file: MulterFile,
+    request: Record<string, unknown>,
+    token: string,
+  ): Promise<Record<string, unknown> | null> {
+    validateDecorationRequest(`${resource}/read`, request);
+    const result = await this.callSync(`/v1/sync/${resource}/read`, [toPart('file', file)], request, token);
+    try {
+      const body = JSON.parse(result.buffer.toString('utf8')) as Record<string, unknown>;
+      if (body && !Array.isArray(body) && typeof body === 'object' && Object.hasOwn(body, field)) {
+        const value = body[field];
+        if (value === null || (typeof value === 'object' && !Array.isArray(value))) {
+          // Preserve SDK-native (0-based) configuration rather than silently
+          // changing it into an add request (which uses 1-based pages).
+          return value as Record<string, unknown> | null;
+        }
+      }
+    } catch {
+      // A 2xx file or malformed response is not a valid configuration result.
+    }
+    throw new UpstreamSdkError({ source: 'pdf', status: 502, code: 190999, message: 'PDF SDK returned an invalid configuration response.' });
   }
 
   // ---- Standards / Optimize ----------------------------------------------

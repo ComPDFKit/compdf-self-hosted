@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
-import {
-  Key, Copy, Check, TrendingUp, Clock, ArrowRight, AlertCircle, XCircle, ShieldCheck, Briefcase, Eye,
-} from 'lucide-vue-next';
-import { dashboardApi, type ApiKeyInfo, type Overview, type OverviewRange, type TrendPoint } from '@/api/dashboard';
-import { useBrandStore } from '@/stores/brand';
+import { Check, TrendingUp, Clock, AlertCircle, XCircle } from 'lucide-vue-next';
+import { dashboardApi, type Overview, type OverviewRange, type TrendPoint } from '@/api/dashboard';
 import {
   Select,
   SelectContent,
@@ -14,11 +11,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-const PRIVATE_DEPLOYMENT_DOC_URL = 'https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview';
 const { t } = useI18n();
 const data = ref<Overview | null>(null);
-const copied = ref(false);
-const brand = useBrandStore();
 const selectedRange = ref<OverviewRange>('week');
 const hoveredIndex = ref<number | null>(null);
 
@@ -26,31 +20,9 @@ onMounted(() => {
   loadOverview();
 });
 
-const primaryApiKey = computed<ApiKeyInfo | null>(() => {
-  const keys = data.value?.apiKeys ?? [];
-  return keys.find((item) => !!item.key) ?? keys.find((item) => item.status === 1) ?? keys[0] ?? null;
-});
-const hasApiKey = computed(() => !!primaryApiKey.value?.key);
-const apiKey = computed(() => primaryApiKey.value?.key ?? '—');
-const deploymentDocsUrl = computed(() => brand.c.docUrl || PRIVATE_DEPLOYMENT_DOC_URL);
-const apiKeyStatus = computed(() => {
-  if (!primaryApiKey.value) return { label: t('overview.apiKeyMissing'), cls: 'bg-slate-100 text-slate-500 border-slate-200', dot: 'bg-slate-400' };
-  if (primaryApiKey.value.status === 1) return { label: t('overview.activated'), cls: 'bg-[#ecfdf5] text-[#10b981] border-[#d1fae5]', dot: 'bg-[#10b981]' };
-  return { label: t('overview.apiKeyInactive'), cls: 'bg-amber-50 text-amber-600 border-amber-100', dot: 'bg-amber-500' };
-});
-
 const countMetricKeys = ['success', 'invalid', 'fail', 'exception', 'errorTotal'] as const;
 type CountMetricKey = typeof countMetricKeys[number];
 type TrendMetricKey = CountMetricKey | 'avgSuccessDurationMs';
-
-const licenseStatus = computed(() => ({ label: t('overview.license.status.valid'), cls: 'bg-blue-50 text-blue-600 border-blue-100', dot: 'bg-blue-500' }));
-const licenseProgressPercent = 100;
-const licenseProgressClass = 'bg-[#2563eb]';
-const licenseExpirationText = computed(() => t('overview.license.permanent'));
-const licenseModules = computed(() => [
-  { key: 'pdf-sdk', label: t('overview.license.module.pdfSdk') },
-  { key: 'conversion', label: t('overview.license.module.conversion') },
-]);
 
 const trendMetrics = computed(() => [
   { key: 'success' as const, label: t('overview.success'), color: '#2563eb' },
@@ -93,34 +65,6 @@ async function onRangeUpdate(value: unknown) {
   }
 }
 
-async function copyKey() {
-  if (!hasApiKey.value) return;
-  await copyText(apiKey.value);
-  copied.value = true;
-  setTimeout(() => (copied.value = false), 2000);
-}
-
-async function copyText(text: string) {
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return;
-    } catch {
-      // Fall through to the legacy path for non-secure contexts or denied permissions.
-    }
-  }
-  const textarea = document.createElement('textarea');
-  textarea.value = text;
-  textarea.setAttribute('readonly', '');
-  textarea.style.position = 'fixed';
-  textarea.style.left = '-9999px';
-  textarea.style.top = '0';
-  document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand?.('copy');
-  textarea.remove();
-}
-
 function trendValue(point: TrendPoint, key: TrendMetricKey) {
   const value = point[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
@@ -160,77 +104,7 @@ function hoverLeft(index: number) {
 
 <template>
   <div data-test="overview-root" class="space-y-6 max-w-7xl mx-auto px-4 md:px-0 animate-fade-in font-sans">
-    <!-- 1. API 密钥 + 许可证健康度 -->
-    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-      <div data-test="api-key-management" class="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs hover:shadow-sm transition">
-        <div class="flex justify-between items-center mb-6">
-          <div class="flex items-center gap-2">
-            <Key :size="18" class="text-[#2563eb]" />
-            <h2 class="text-sm font-bold text-stone-800">{{ t('overview.apiKeyManagement') }}</h2>
-          </div>
-          <span :class="['font-bold text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1 border', apiKeyStatus.cls]">
-            <span :class="['w-1.5 h-1.5 rounded-full', apiKeyStatus.dot]" /> {{ apiKeyStatus.label }}
-          </span>
-        </div>
-        <div class="bg-[#eff6ff] border border-[#dbeafe] rounded-xl p-4 flex items-center justify-between gap-4 min-h-[92px]">
-          <code class="font-mono text-sm font-bold text-stone-800 select-all break-all">{{ apiKey }}</code>
-          <button
-            data-test="overview-copy-api-key"
-            type="button"
-            :disabled="!hasApiKey"
-            @click="copyKey"
-            :class="['px-4 py-2 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-sm transition-all shrink-0',
-              !hasApiKey ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : copied ? 'bg-emerald-600 text-white cursor-pointer' : 'bg-[#2563eb] hover:bg-[#1d4ed8] text-white cursor-pointer']"
-          >
-            <component :is="copied ? Check : Copy" :size="14" />
-            <span>{{ copied ? t('common.copied') : t('common.copy') }}</span>
-          </button>
-        </div>
-        <div class="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between gap-4">
-          <span class="text-xs font-semibold text-stone-400">{{ t('overview.privateDeployQuestion') }}</span>
-          <a :href="deploymentDocsUrl" target="_blank" rel="noopener" class="text-xs font-bold text-[#2563eb] hover:underline flex items-center gap-1 shrink-0">
-            {{ t('overview.deploymentDocs') }} <ArrowRight :size="13" />
-          </a>
-        </div>
-      </div>
-
-      <div data-test="license-health" class="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-xs hover:shadow-sm transition">
-        <div class="flex justify-between items-center mb-6">
-          <div class="flex items-center gap-2">
-            <ShieldCheck :size="18" class="text-[#2563eb]" />
-            <h2 class="text-sm font-bold text-stone-800">{{ t('overview.license.title') }}</h2>
-          </div>
-          <span :class="['font-bold text-[11px] px-2.5 py-1 rounded-full flex items-center gap-1 border', licenseStatus.cls]">
-            <span :class="['w-1.5 h-1.5 rounded-full', licenseStatus.dot]" /> {{ licenseStatus.label }}
-          </span>
-        </div>
-        <div class="space-y-3">
-          <div class="flex items-center justify-between gap-4 text-xs font-bold">
-            <span class="text-stone-500">{{ t('overview.license.statusLabel') }}</span>
-            <span class="text-[#2563eb]">{{ licenseExpirationText }}</span>
-          </div>
-          <div class="h-2 rounded-full bg-slate-100 overflow-hidden">
-            <div class="h-full rounded-full transition-all" :class="licenseProgressClass" :style="{ width: `${licenseProgressPercent}%` }" />
-          </div>
-        </div>
-        <div class="mt-7">
-          <p class="text-xs font-semibold text-stone-400 mb-3">{{ t('overview.license.modules') }}</p>
-          <div class="flex flex-wrap gap-3">
-            <span
-              v-for="module in licenseModules"
-              :key="module.key"
-              class="inline-flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-stone-700"
-            >
-              <component :is="module.key.toLowerCase().includes('pdf') ? Eye : Briefcase" :size="14" class="text-[#2563eb]" />
-              {{ module.label }}
-              <Check :size="14" class="text-[#10b981]" />
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 2. 今日数据 (PRD §5: 成功/无效/失败/异常 + 错误总数 + 成功平均耗时) -->
+    <!-- 今日数据 (PRD §5: 成功/无效/失败/异常 + 错误总数 + 成功平均耗时) -->
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
       <div class="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs hover:shadow-sm transition">
         <div class="flex items-center gap-2 mb-2 text-stone-500 text-xs font-semibold">

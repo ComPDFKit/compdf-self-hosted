@@ -1,0 +1,9 @@
+services:
+  compdf-server:
+    image: ${COMPDF_SERVER_BUILD_IMAGE:-compdfkit/compdf-server:1.1.0-local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+      args:
+        COMPDF_VERSION: ${COMPDF_VERSION:-1.1.0}

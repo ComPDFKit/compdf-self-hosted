@@ -5,15 +5,9 @@
  * sends the token anywhere (the server attaches X-ComPDF-License upstream).
  */
 import { defineStore } from 'pinia';
+import type { LicenseDisplay } from '@/api/dashboard';
 
-export interface LicenseDisplay {
-  sub?: string;
-  exp?: number;
-  scope?: unknown;
-  limits?: unknown;
-  status: 'valid' | 'expiring' | 'expired' | 'inactive';
-  present: boolean;
-}
+export type { LicenseDisplay } from '@/api/dashboard';
 
 interface WindowWithLicense extends Window {
   COMPDF_LICENSE?: LicenseDisplay;

@@ -1,0 +1,135 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "compdf.fullname" . }}-app-pdf
+  labels:
+    {{- include "compdf.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if .Values.app.pdfData.storageClassName }}
+  storageClassName: {{ .Values.app.pdfData.storageClassName }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.app.pdfData.size }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "compdf.fullname" . }}-app-output
+  labels:
+    {{- include "compdf.labels" . | nindent 4 }}
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if .Values.app.output.storageClassName }}
+  storageClassName: {{ .Values.app.output.storageClassName }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.app.output.size }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "compdf.fullname" . }}-app
+  labels:
+    {{- include "compdf.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  selector:
+    {{- include "compdf.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+  ports:
+    - name: conversion
+      port: 7000
+    - name: pdf-sdk
+      port: 7001
+    - name: app
+      port: 9903
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "compdf.fullname" . }}-app
+  labels:
+    {{- include "compdf.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  replicas: {{ .Values.app.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "compdf.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: app
+  template:
+    metadata:
+      labels:
+        {{- include "compdf.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: app
+    spec:
+      serviceAccountName: {{ include "compdf.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: app
+          image: {{ include "compdf.image" (list .Values.images.app .) | quote }}
+          imagePullPolicy: {{ .Values.images.app.pullPolicy }}
+          ports:
+            - name: conversion
+              containerPort: 7000
+            - name: pdf-sdk
+              containerPort: 7001
+            - name: app
+              containerPort: 9903
+          env:
+            - name: REDIS_URL
+              value: {{ printf "redis://%s:%v/0" (include "compdf.redisHost" .) (ternary .Values.infra.redisPort .Values.external.redisPort .Values.infra.enabled) | quote }}
+            - name: MYSQL_HOST
+              value: {{ include "compdf.databaseHost" . | quote }}
+            - name: S3_ENDPOINT
+              value: {{ include "compdf.s3Endpoint" . | quote }}
+            - name: COMPDF_LICENSE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.license.existingSecret }}
+                  key: {{ .Values.license.key }}
+            - name: COMPDFKIT_LICENSE
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.license.existingSecret }}
+                  key: {{ .Values.license.key }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: conversion
+            periodSeconds: 10
+            failureThreshold: 18
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: conversion
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.app.resources | nindent 12 }}
+          volumeMounts:
+            - name: pdf-data
+              mountPath: /data
+            - name: output
+              mountPath: /tmp/compdf_output
+      volumes:
+        - name: pdf-data
+          persistentVolumeClaim:
+            claimName: {{ include "compdf.fullname" . }}-app-pdf
+        - name: output
+          persistentVolumeClaim:
+            claimName: {{ include "compdf.fullname" . }}-app-output
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}

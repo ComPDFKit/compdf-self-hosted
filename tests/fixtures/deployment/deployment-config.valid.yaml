@@ -1,0 +1,46 @@
+schemaVersion: 1
+entrypoint:
+  publicBaseUrl: https://compdf.example.com
+  listenPort: 8080
+  trustedProxies:
+    - 10.0.0.0/8
+database:
+  host: compdf-infra
+  port: 3306
+  name: compdfkit
+  user: compdfkit
+  passwordSecret:
+    file: /run/secrets/mysql_password
+  tls:
+    mode: disabled
+  connectTimeoutMs: 10000
+  poolSize: 20
+redis:
+  host: compdf-infra
+  port: 6379
+  database: 0
+  tls:
+    mode: disabled
+  connectTimeoutMs: 5000
+storage:
+  type: bundled
+  dataRoot: /var/lib/compdf
+license:
+  tokenSecret:
+    file: /run/secrets/compdf_license
+tls:
+  termination: proxy
+  minimumVersion: TLSv1.2
+cors:
+  origins:
+    - https://compdf.example.com
+retention:
+  taskResultDays: 30
+  operationLogDays: 90
+  backupCount: 5
+updates:
+  enabled: true
+  channel: stable
+  manifestUrl: https://updates.example.com/compdf/stable/release.json
+  autoDownload: false
+  automaticInstall: false

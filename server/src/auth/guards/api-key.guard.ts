@@ -10,7 +10,7 @@
  * This is SEPARATE from JwtAuthGuard (admin sessions). It does NOT touch
  * license/limit logic.
  */
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'crypto';
 import { MysqlClient } from '../../clients/mysql.client';
@@ -25,6 +25,8 @@ interface ApiKeyRow {
 
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
+  private readonly logger = new Logger(ApiKeyGuard.name);
+
   constructor(
     private readonly mysql: MysqlClient,
     private readonly config: ConfigService,
@@ -52,6 +54,12 @@ export class ApiKeyGuard implements CanActivate {
     }
     req.apiKeyId = row.key_id;
     req.apiKeyOwner = row.owner_username;
+    // Keep the management page's last-used value in sync with every
+    // authenticated API-key request. This is best-effort so an audit
+    // timestamp failure never turns a valid client request into a 5xx.
+    await this.mysql
+      .execute('UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP WHERE key_id = ?', [row.key_id])
+      .catch((err: Error) => this.logger.warn(`last-used timestamp update failed: ${err.message}`));
     return true;
   }
 }

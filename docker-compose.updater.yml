@@ -1,0 +1,6 @@
+services:
+  compdf-server:
+    environment:
+      - COMPDF_UPDATER_SOCKET=/run/compdf-updater/compdf-updater.sock
+    volumes:
+      - /run/compdf-updater/compdf-updater.sock:/run/compdf-updater/compdf-updater.sock

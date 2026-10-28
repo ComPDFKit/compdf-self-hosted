@@ -7,10 +7,10 @@
  *
  * `recordUserAction()` is called by the controller after mutating operations
  * (settings change, logo upload, username change). The LoggingInterceptor only
- * writes api_call/error rows, so user_action entries must be explicit — and
- * best-effort (a log write failure must not break the op).
+ * writes api_call/error rows, so user_action entries must be explicit. Writes
+ * are best-effort by default; key action audit failures are reported to the UI.
  */
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -18,7 +18,7 @@ import { ApiKeyService } from '../auth/api-key.service';
 import { MysqlClient } from '../clients/mysql.client';
 import { UpdateCheckService } from './update-check.service';
 import {
-  ApiKeyInfo, LogEntry, LoginRecord, LogsQueryDto, Overview,
+  ApiKeyActionDto, ApiKeyInfo, LogEntry, LoginRecord, LogsQueryDto, Overview,
   OverviewRange, OverviewToday, Paged, TrendPoint, VersionInfo,
 } from './dashboard.dto';
 
@@ -229,6 +229,7 @@ export class DashboardService {
       releasedAt: status.releasedAt,
       changelogUrl: status.changelogUrl,
       image: status.image,
+      releaseNotes: SERVER_RELEASE_NOTES ?? status.releaseNotes,
     };
   }
 
@@ -256,12 +257,28 @@ export class DashboardService {
     await this.mysql.execute('UPDATE users SET avatar_path = ? WHERE id = ?', [avatarPath, userId]);
   }
 
-  /** Best-effort user_action audit row. Never throws. */
+  async recordApiKeyAction(operator: string, dto: ApiKeyActionDto): Promise<void> {
+    const keys = await this.getApiKeys();
+    const key = keys.find((item) => item.keyId === dto.keyId);
+    if (!key?.key) {
+      throw new NotFoundException({ code: 'NOT_FOUND', message: 'API key is unavailable' });
+    }
+    await this.recordUserAction(
+      operator,
+      dto.action === 'copy' ? 'copy_api_key' : 'view_api_key',
+      key.keyId,
+      dto.action === 'copy' ? '复制密钥' : '查看密钥',
+      { required: true },
+    );
+  }
+
+  /** Best-effort by default; required audit writes propagate failures to the caller. */
   async recordUserAction(
     operator: string,
     action: string,
     target: string | null,
     detail: string,
+    options: { required?: boolean } = {},
   ): Promise<void> {
     await this.mysql
       .execute(
@@ -269,7 +286,10 @@ export class DashboardService {
          VALUES ('user_action', ?, 'INFO', 'success', 'success', ?, ?, ?)`,
         [operator, action, target, detail],
       )
-      .catch((err: Error) => this.logger.warn(`user_action log failed: ${err.message}`));
+      .catch((err: Error) => {
+        if (options.required) throw err;
+        this.logger.warn(`user_action log failed: ${err.message}`);
+      });
   }
 }
 
@@ -406,7 +426,8 @@ function overviewRangeConfig(range: OverviewRange): {
 
 // process.cwd() is the server root in both dev (server/) and prod (/app), where
 // package.json lives. Read once at module load — version is display-only.
-const SERVER_VERSION = readServerVersion();
+const SERVER_VERSION = process.env.COMPDF_VERSION?.trim() || readServerVersion();
+const SERVER_RELEASE_NOTES = readServerReleaseNotes();
 function readServerVersion(): string {
   try {
     const pkg = JSON.parse(readFileSync(join(process.cwd(), 'package.json'), 'utf8'));
@@ -414,6 +435,21 @@ function readServerVersion(): string {
   } catch {
     return 'unknown';
   }
+}
+
+function readServerReleaseNotes(): string | null {
+  for (const file of [
+    join(process.cwd(), 'release', 'version.json'),
+    join(process.cwd(), '..', 'release', 'version.json'),
+  ]) {
+    try {
+      const metadata = JSON.parse(readFileSync(file, 'utf8')) as { releaseNotes?: unknown };
+      if (typeof metadata.releaseNotes === 'string' && metadata.releaseNotes.trim()) return metadata.releaseNotes.trim();
+    } catch {
+      // Development mode may not include the packaged release metadata.
+    }
+  }
+  return null;
 }
 
 /** Build the WHERE clause + params for log filtering (list + export share this). */

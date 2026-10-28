@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { TOOL_SECTIONS, resolveTool, resolveConversionTypes } from './convert-map';
+import { TOOL_SECTIONS, resolveTool, resolveConversionTypes, visibleTools } from './convert-map';
 
-// Authoritative {fromType, toType} expectations for all 40 tools.
+// Authoritative {fromType, toType} expectations for all 44 tools.
 // Drives CONVERSION_FEATURES[`${fromType}/${toType}`] gating + buildRequest branching.
 const EXPECTED: Record<string, { fromType: string; toType: string }> = {
   // pdf→X (convert-target, fromType='pdf')
@@ -49,12 +49,16 @@ const EXPECTED: Record<string, { fromType: string; toType: string }> = {
   'remove-watermark': { fromType: 'pdf', toType: 'removeWatermark' },
   'encrypt': { fromType: 'pdf', toType: 'encrypt' },
   'decrypt': { fromType: 'pdf', toType: 'decrypt' },
+  'add-headers-footers': { fromType: 'pdf', toType: 'headers-footers/add' },
+  'remove-headers-footers': { fromType: 'pdf', toType: 'headers-footers/remove' },
+  'add-bates': { fromType: 'pdf', toType: 'bates/add' },
+  'remove-bates': { fromType: 'pdf', toType: 'bates/remove' },
 };
 
 describe('convert-map', () => {
-  it('has exactly 40 tools across 5 sections', () => {
+  it('has exactly 44 tools across 5 sections', () => {
     const all = TOOL_SECTIONS.flatMap((s) => s.tools);
-    expect(all.length).toBe(40);
+    expect(all.length).toBe(44);
     expect(TOOL_SECTIONS.length).toBe(5);
   });
 
@@ -72,7 +76,7 @@ describe('convert-map', () => {
   it('image-to-word → convert-type img/docx', () => {
     const t = resolveTool('image-to-word')!;
     expect(t.endpoint).toEqual({ kind: 'convert-type', type: 'img/docx' });
-    expect(t.accept).toBe('.jpg,.png,.jpeg,.bmp');
+    expect(t.accept).toBe('.png,.jpg,.jpeg,.jp2000,.bmp,.tiff,.webp,.gif');
   });
 
   it('pdf-to-editable → convert-type pdf/pdf', () => {
@@ -81,6 +85,15 @@ describe('convert-map', () => {
 
   it('pdf-to-ofd → convert-type pdf/ofd', () => {
     expect(resolveTool('pdf-to-ofd')!.endpoint).toEqual({ kind: 'convert-type', type: 'pdf/ofd' });
+  });
+
+  it('filters comma-separated hidden release tools without mutating the catalog', () => {
+    const all = TOOL_SECTIONS.flatMap((section) => section.tools);
+    const visible = visibleTools(all, ' pdf-to-standard, merge ');
+    expect(visible).toHaveLength(42);
+    expect(visible.map((tool) => tool.slug)).not.toContain('pdf-to-standard');
+    expect(visible.map((tool) => tool.slug)).not.toContain('merge');
+    expect(all).toHaveLength(44);
   });
 
   it('pdf-to-markdown → convert-type pdf/markdown', () => {
@@ -102,7 +115,7 @@ describe('convert-map', () => {
   it('image-to-pdf → convert-to-pdf png/pdf (no explicit type; auto-infer)', () => {
     const t = resolveTool('image-to-pdf')!;
     expect(t.endpoint.kind).toBe('convert-to-pdf');
-    expect(t.accept).toBe('.jpg,.png,.jpeg,.bmp');
+    expect(t.accept).toBe('.png,.jpg,.jpeg,.jp2000,.bmp,.tiff,.webp,.gif');
   });
 
   it('merge → pdf merge, multiple files', () => {
@@ -135,18 +148,18 @@ describe('convert-map', () => {
   });
 
   describe('resolveConversionTypes', () => {
-    it('the EXPECTED table covers exactly all 40 catalog tools', () => {
+    it('the EXPECTED table covers exactly all 44 catalog tools', () => {
       const all = TOOL_SECTIONS.flatMap((s) => s.tools);
-      expect(all.length).toBe(40);
+      expect(all.length).toBe(44);
       for (const t of all) {
         expect(EXPECTED[t.slug], `missing EXPECTED entry for ${t.slug}`).toBeDefined();
       }
-      expect(Object.keys(EXPECTED).length).toBe(40);
+      expect(Object.keys(EXPECTED).length).toBe(44);
     });
 
     it('returns the expected {fromType, toType} for every catalog tool', () => {
       const all = TOOL_SECTIONS.flatMap((s) => s.tools);
-      expect(all.length).toBe(40);
+      expect(all.length).toBe(44);
       for (const t of all) {
         const got = resolveConversionTypes(t);
         const want = EXPECTED[t.slug];

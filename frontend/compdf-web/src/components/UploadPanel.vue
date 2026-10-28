@@ -1,1451 +1,1585 @@
 <script setup lang="ts">
-/**
- * UploadPanel — the upload lifecycle shell.
- *
- * Owns drag-drop, file list, convert/progress/download/reset buttons, optional
- * format selection, and success state. Parameter controls are delegated to
- * ParamForm.vue. All SDK calls are sync blob-stream POSTs to /api/v1/* via
- * apiClient.
- *
- * State machine:
- *   null → selectType | await | uploading → success → null
- *
- *   - single + pdf/img source → 'await' (show params, then Convert)
- *   - single + other→pdf      → 'uploading' (no params, direct upload)
- *   - multiple + pdf + no toType → 'selectType' (tile grid; not used by the
- *     current catalog because every tool has a fixed toType)
- *   - merge (multiple + toType='merge') → 'await' (file list + merge options)
- */
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { AxiosProgressEvent, AxiosResponse } from 'axios';
-import { apiClient, downloadBlob, toApiError } from '@/api/client';
+import { onClickOutside } from '@vueuse/core';
+import type { AxiosResponse } from 'axios';
+import { apiClient, toApiError, parseContentDispositionFilename } from '@/api/client';
 import { apiErrorTranslationKey } from '@/api/error-localization';
+import { batchApi, buildBatchRequest, type BatchInfo } from '@/api/batch';
+import type { Endpoint } from '@/config/convert-map';
 import { toolI18nKey } from '@/config/i18n-keys';
-import {
-  buildRequest,
-  compressImageQualityValidationKey,
-  defaultParameter,
-  deletePageRangeValidationKey,
-  encryptPasswordValidationKey,
-  imageDpiValidationKey,
-  insertSourcePageRangeValidationKey,
-  watermarkValidationKey,
-  type UploadParameter,
-} from '@/config/param-schema';
-import type { Endpoint, PdfOp } from '@/config/convert-map';
-import ParamForm from '@/components/ParamForm.vue';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
+import { buildRequest, defaultParameter, watermarkValidationKey, compressImageQualityValidationKey, deletePageRangeValidationKey, encryptPasswordValidationKey, imageDpiValidationKey, insertSourcePageRangeValidationKey } from '@/config/param-schema';
+import { buildStampRequest, defaultStampParameter, stampValidationKey } from '@/config/stamp-schema';
+import { droppedFiles, fileValidationKey, parsePages, splitCustomRanges, type PickedFile, type SplitMode } from '@/utils/batch-files';
+import { nameSplitOutputs, saveBlob, zipFiles } from '@/utils/result-archive';
+import { randomUuid } from '@/utils/random-uuid';
+import ParamForm from './ParamForm.vue';
+import StampSettings from './StampSettings.vue';
+import SplitSettings from './SplitSettings.vue';
+import WatermarkSettings from './WatermarkSettings.vue';
+import { CONVERSION_FEATURES } from '@/config/param-schema';
+import UploadIcon from '@/assets/icons/ui/batch-upload.svg?component';
+import FolderIcon from '@/assets/icons/ui/batch-folder.svg?component';
+import DeleteIcon from '@/assets/icons/ui/batch-delete.svg?component';
+import DownloadIcon from '@/assets/icons/ui/batch-result-download.svg?component';
+import DocumentIcon from '@/assets/icons/ui/batch-file.svg?component';
+import DragHandleIcon from '@/assets/icons/ui/batch-drag.svg?component';
+import UploadOutlineIcon from '@/assets/icons/ui/batch-upload-outline.svg?component';
+import ChevronIcon from '@/assets/icons/ui/batch-chevron.svg?component';
+import ClearIcon from '@/assets/icons/ui/batch-clear.svg?component';
+import LockIcon from '@/assets/icons/ui/batch-lock.svg?component';
+import EyeOffIcon from '@/assets/icons/ui/batch-eye-off.svg?component';
+import WaitingIcon from '@/assets/icons/ui/batch-status-waiting.svg?component';
+import SuccessIcon from '@/assets/icons/ui/batch-status-success.svg?component';
+import FailedIcon from '@/assets/icons/ui/batch-status-failed.svg?component';
+import RetryIcon from '@/assets/icons/ui/batch-retry.svg?component';
+import ResetIcon from '@/assets/icons/ui/batch-reset.svg?component';
+import WarningIcon from '@/assets/icons/ui/batch-warning.svg?component';
+import spinnerUrl from '@/assets/icons/ui/batch-spinner.png';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-import UploadIcon from '@/assets/icons/ui/upload.svg?component';
-import DeleteIcon from '@/assets/icons/ui/delete.svg?component';
-import DownloadIcon from '@/assets/icons/ui/download.svg?component';
-import LoadingIcon from '@/assets/icons/ui/loading.svg?component';
-import SuccessIcon from '@/assets/icons/ui/success.svg?component';
-import DocumentIcon from '@/assets/icons/ui/document.svg?component';
-import UnFoldIcon from '@/assets/icons/ui/unfold_current.svg?component';
-import FoldIcon from '@/assets/icons/ui/fold_current.svg?component';
-import ConvertIcon from '@/assets/icons/ui/convert.svg?component';
-import PdfIcon from '@/assets/icons/ui/pdf.svg?component';
-import WordIcon from '@/assets/icons/ui/word.svg?component';
-import ExcelIcon from '@/assets/icons/ui/excel.svg?component';
-import PptIcon from '@/assets/icons/ui/ppt.svg?component';
-import HtmlIcon from '@/assets/icons/ui/html.svg?component';
-import PngIcon from '@/assets/icons/ui/png.svg?component';
-import JpgIcon from '@/assets/icons/ui/jpg.svg?component';
-import TxtIcon from '@/assets/icons/ui/txt.svg?component';
-import CsvIcon from '@/assets/icons/ui/csv.svg?component';
-import RtfIcon from '@/assets/icons/ui/rtf.svg?component';
-import JsonIcon from '@/assets/icons/ui/json.svg?component';
+const props = defineProps<{ fromType: string; toType: string; mode: 'single' | 'multiple'; accept: string; toolSlug: string; endpoint: Endpoint }>();
+const emit = defineEmits<{ (e: 'updateStatus', status: string): void }>();
+const { t } = useI18n();
+type RowStatus = 'ready' | 'uploading' | 'uploaded' | 'queued' | 'processing' | 'success' | 'failed' | 'canceled';
+interface FileRow {
+  id: string; file: File; path: string; password: string; showPassword: boolean; pageRange: string;
+  status: RowStatus; error: string; validation: string | null;
+  itemId?: string; batchId?: string;
+  outputName?: string; result?: Blob; request?: Record<string, unknown>; field?: string;
+}
+const rows = ref<FileRow[]>([]);
+const selectedId = ref('');
+const selected = computed(() => rows.value.find((row) => row.id === selectedId.value) ?? rows.value[0]);
+const input = ref<HTMLInputElement>();
+const folderInput = ref<HTMLInputElement>();
+const uploadMenu = ref<HTMLDetailsElement>();
+onClickOutside(uploadMenu, () => {
+  if (uploadMenu.value) uploadMenu.value.open = false;
+});
+const imageInput = ref<HTMLInputElement>();
+const insertInput = ref<HTMLInputElement>();
+const iccInput = ref<HTMLInputElement>();
+const parameter = ref(defaultParameter());
+const password = ref(''); // ParamForm compatibility: opening passwords live on rows.
+const isCsvMerge = ref('0');
+const watermarkImageFile = shallowRef<File | null>(null);
+const settingsTouched = ref(false);
+const insertTargetFile = shallowRef<File | null>(null);
+const iccProfileFile = shallowRef<File | null>(null);
+const stampKind = computed(() => props.toolSlug.includes('bates') ? 'bates' as const : 'headers-footers' as const);
+const stamp = ref(defaultStampParameter(stampKind.value));
+const isStamp = computed(() => ['add-headers-footers', 'add-bates'].includes(props.toolSlug));
+const isRemoval = computed(() => ['remove-headers-footers', 'remove-bates'].includes(props.toolSlug));
+const hasFilePageRange = computed(() => props.toType === 'merge');
+const hasSettings = computed(() => {
+  if (hasFilePageRange.value || isRemoval.value) return false;
+  if (props.toType !== 'pdf' || props.fromType === 'pdf') return true;
+  const features = CONVERSION_FEATURES[`${props.fromType}/${props.toType}`] ?? {};
+  // Opening passwords already belong to the file rows, not the settings panel.
+  return Object.entries(features).some(([name, enabled]) => name !== 'password' && enabled);
+});
+const running = ref(false);
+const readingFolder = ref(false);
+const downloading = ref(false);
+const started = ref(false);
+const pollFailed = ref(false);
+const errorText = ref('');
+const expanded = ref(false);
+const filter = ref<'all' | 'success' | 'failure'>('all');
+const dragDepth = ref(0);
+const draggingId = ref('');
+const splitMode = ref<SplitMode>('custom');
+const splitValue = ref('');
+const splitCount = ref(1);
+const splitSeparator = ref('_');
+const activeBatch = ref('');
+let alive = true;
+let timer: ReturnType<typeof setTimeout> | undefined;
+let releaseWait: (() => void) | undefined;
+const abortController = new AbortController();
+const locked = computed(() => running.value || started.value);
+const completed = computed(() => started.value && !running.value && !pollFailed.value);
+const filesDisabled = computed(() => running.value || downloading.value || pollFailed.value);
+const isTrialLicense = computed(() => window.COMPDF_CONFIG?.isFormalLicense === false);
+const upgradeUrl = computed(() => window.COMPDF_CONFIG?.contactUrl || 'https://www.compdf.com/contact-sales');
+const globalError = computed(() => errorText.value && (pollFailed.value || !rows.value.some((row) => row.error === errorText.value)) ? errorText.value : '');
+const ruleErrors = computed(() => new Map(rows.value.map((row) => [row.id, rowRuleError(row)])));
+const successes = computed(() => rows.value.filter((row) => row.status === 'success'));
+const failures = computed(() => rows.value.filter((row) => ['failed', 'canceled'].includes(row.status) || ruleErrors.value.get(row.id)));
+const ready = computed(() => rows.value.filter((row) => !ruleErrors.value.get(row.id) && row.status === 'ready'));
+const filteredRows = computed(() => filter.value === 'success' ? successes.value : filter.value === 'failure' ? failures.value : rows.value);
+const visibleRows = computed(() => started.value || expanded.value ? filteredRows.value : filteredRows.value.slice(0, 5));
+const processed = computed(() => rows.value.filter((row) => ['success', 'failed', 'canceled'].includes(row.status) || row.validation).length);
+const progress = computed(() => rows.value.length ? Math.round(processed.value / rows.value.length * 100) : 0);
+const currentFile = computed(() => rows.value.find((row) => ['uploading', 'processing'].includes(row.status))?.file.name);
+const actionLabel = computed(() => props.toType === 'split' ? t('batchTools.startSplit') : props.endpoint.kind === 'pdf' && props.toType !== 'pdfa' ? t(toolI18nKey(props.toolSlug)) : t('batchTools.startConversion'));
 
-type FileStatus = 'await' | 'selectType' | 'uploading' | 'success';
+watch([running, started, () => rows.value.length], () => emit('updateStatus', running.value ? 'uploading' : started.value ? 'success' : rows.value.length ? 'await' : ''));
 
-interface FileState {
-  status: FileStatus;
-  name: string;
-  percentage: number | null;
-  raw: File;
-  rawFiles?: File[];
+async function localError(error: unknown): Promise<string> {
+  const apiError = await toApiError(error);
+  const key = apiErrorTranslationKey(apiError, props.endpoint.kind === 'pdf' ? 'pdf' : 'conversion');
+  return key ? t(`pdfToolDetail.upload.errors.apiCodes.${key}`) : apiError.message;
 }
 
-const props = defineProps<{
-  fromType: string;
-  toType: string;
-  mode: 'single' | 'multiple';
-  accept: string;
-  toolSlug: string;
-  endpoint: Endpoint;
-}>();
+async function addFiles(files: PickedFile[]) {
+  if (filesDisabled.value || !alive) return;
+  const rejectedByType = files.filter((picked) => {
+    const validation = fileValidationKey(picked.file, props.accept);
+    return validation === 'batchTools.unsupportedFormat';
+  });
+  const acceptedFiles = files.filter((picked) => !rejectedByType.includes(picked));
+  if (completed.value && acceptedFiles.length) editAgain();
+  errorText.value = !files.length
+    ? t('batchTools.folderEmpty')
+    : rejectedByType.length
+      ? t('batchTools.unsupportedFormat')
+      : '';
+  for (const picked of acceptedFiles) {
+    // Distinct folder paths are distinct files, even if their basenames match.
+    if (rows.value.some((row) => row.path === picked.path && row.file.size === picked.file.size && row.file.lastModified === picked.file.lastModified)) continue;
+    const row: FileRow = { id: randomUuid(), ...picked, password: '', showPassword: false, pageRange: '', status: 'ready', error: '', validation: fileValidationKey(picked.file, props.accept) };
+    rows.value.push(row);
+    if (!selectedId.value) selectedId.value = row.id;
+  }
+}
 
-const emit = defineEmits<{
-  (e: 'updateStatus', status: string): void;
-}>();
+async function changeFiles(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const files = Array.from(target.files ?? []).map((file) => ({ file, path: file.webkitRelativePath || file.name }));
+  target.value = '';
+  await addFiles(files);
+}
+async function drop(event: DragEvent) {
+  dragDepth.value = 0;
+  if (filesDisabled.value || !event.dataTransfer || draggingId.value) return;
+  readingFolder.value = true;
+  try { await addFiles(await droppedFiles(event.dataTransfer)); }
+  catch { errorText.value = t('batchTools.readFolderFailed'); }
+  finally { readingFolder.value = false; }
+}
+function removeRow(id: string) {
+  if (running.value || downloading.value || pollFailed.value) return;
+  if (props.toType === 'merge' && started.value) return;
+  rows.value = rows.value.filter((row) => row.id !== id);
+  if (!rows.value.length) clearList();
+}
+function clearList() {
+  if (running.value || downloading.value || pollFailed.value) return;
+  rows.value = []; selectedId.value = ''; started.value = false; pollFailed.value = false; settingsTouched.value = false;
+  activeBatch.value = ''; errorText.value = ''; filter.value = 'all';
+}
+function moveRow(id: string, offset: number) {
+  if (locked.value) return;
+  const index = rows.value.findIndex((row) => row.id === id);
+  const next = index + offset;
+  if (index < 0 || next < 0 || next >= rows.value.length) return;
+  const [row] = rows.value.splice(index, 1);
+  rows.value.splice(next, 0, row!);
+}
+function dropRow(id: string) {
+  const from = rows.value.findIndex((row) => row.id === draggingId.value);
+  const to = rows.value.findIndex((row) => row.id === id);
+  if (from >= 0 && to >= 0) moveRow(draggingId.value, to - from);
+  draggingId.value = '';
+}
+function editAgain() {
+  if (running.value || downloading.value || pollFailed.value) return;
+  started.value = false; activeBatch.value = ''; pollFailed.value = false; filter.value = 'all'; settingsTouched.value = false;
+  rows.value.forEach((row) => Object.assign(row, { status: 'ready', itemId: undefined, batchId: undefined, result: undefined, request: undefined, outputName: undefined, error: '' }));
+}
 
-const { t } = useI18n();
-const isFormalLicense = computed(
-  () => window.COMPDF_CONFIG?.isFormalLicense === true,
-);
-
-// ---- state refs ------------------------------------------------------------
-const file = ref<FileState | null>(null);
-const input = ref<HTMLInputElement | null>(null);
-const watermarkImageInput = ref<HTMLInputElement | null>(null);
-const insertTargetInput = ref<HTMLInputElement | null>(null);
-const iccProfileInput = ref<HTMLInputElement | null>(null);
-
-const parameter = ref<UploadParameter>(defaultParameter());
-const password = ref('');
-const errorText = ref('');
-const isCsvMerge = ref('0');
-
-const disabled = ref(false);
-const dragover = ref(false);
-const onDragenter = ref(false);
-const replace = ref(false);
-const isAddingFiles = ref(false);
-const Converting = ref(false);
-const settingsOpen = ref(false);
-
-const insertTargetFile = ref<File | null>(null);
-const watermarkImageFile = ref<File | null>(null);
-const iccProfileFile = ref<File | null>(null);
-
-// the most recent blob response — kept so the success-card "Download File"
-// button can re-trigger the download without re-uploading.
-const blobResponse = ref<AxiosResponse<Blob> | null>(null);
-
-// selectType tile grid state for a generic PDF converter mode.
-const type = ref('docx');
-const argument = ref(props.toType || 'docx');
-
-const typeMapping = computed<Record<string, { title: string; icon: unknown }>>(() => ({
-  docx: { title: t('pdfToolDetail.upload.fileTypes.word'), icon: WordIcon },
-  xlsx: { title: t('pdfToolDetail.upload.fileTypes.excel'), icon: ExcelIcon },
-  pptx: { title: t('pdfToolDetail.upload.fileTypes.slide'), icon: PptIcon },
-  html: { title: t('pdfToolDetail.upload.fileTypes.html'), icon: HtmlIcon },
-  png: { title: t('pdfToolDetail.upload.fileTypes.png'), icon: PngIcon },
-  jpg: { title: t('pdfToolDetail.upload.fileTypes.jpg'), icon: JpgIcon },
-  txt: { title: t('pdfToolDetail.upload.fileTypes.txt'), icon: TxtIcon },
-  csv: { title: t('pdfToolDetail.upload.fileTypes.csv'), icon: CsvIcon },
-  rtf: { title: t('pdfToolDetail.upload.fileTypes.rtf'), icon: RtfIcon },
-  json: { title: t('pdfToolDetail.upload.fileTypes.json'), icon: JsonIcon },
-}));
-
-const PDF_ACTION_PROGRESS_KEYS: Record<string, string> = {
-  merge: 'pdfToolDetail.upload.merging',
-  split: 'pdfToolDetail.upload.splitting',
-  insert: 'pdfToolDetail.upload.inserting',
-  delete: 'pdfToolDetail.upload.deleting',
-  rotate: 'pdfToolDetail.upload.rotating',
-  compress: 'pdfToolDetail.upload.compressing',
-  'add-watermark': 'pdfToolDetail.upload.addingWatermark',
-  'remove-watermark': 'pdfToolDetail.upload.removingWatermark',
-  encrypt: 'pdfToolDetail.upload.encrypting',
-  decrypt: 'pdfToolDetail.upload.decrypting',
-};
-
-const convertButtonLabel = computed(() => (
-  props.endpoint.kind === 'pdf' && props.toType !== 'pdfa'
-    ? t(toolI18nKey(props.toolSlug))
-    : t('pdfToolDetail.upload.convert')
-));
-
-const actionInProgressText = computed(() => (
-  t(PDF_ACTION_PROGRESS_KEYS[props.toolSlug] ?? 'pdfToolDetail.upload.convertingAction')
-));
-
-const isPdfStandardTool = computed(() => props.toType === 'pdfa');
-const canSelectMultiple = computed(() => props.mode === 'multiple' && !isPdfStandardTool.value);
-const isSplitTool = computed(() => props.toType === 'split');
-const isTaskRunning = computed(() => Converting.value || file.value?.status === 'uploading');
-
-const selectedFiles = computed<File[]>(() => {
-  if (!file.value) return [];
-  return file.value.rawFiles ?? [file.value.raw];
+const validationKey = computed(() => {
+  if (isStamp.value) return stampValidationKey(stampKind.value, stamp.value);
+  if (props.toType === 'addWatermark') {
+    if (parsePages(normalizedFileRange(parameter.value.pageRanges)) === null) return 'batchTools.stamp.errors.pages';
+    if (parameter.value.watermarkType === 'text' && parameter.value.watermarkFontColor && !/^#[\da-f]{6}$/i.test(parameter.value.watermarkFontColor)) return 'batchTools.stamp.errors.color';
+    return watermarkValidationKey(parameter.value, watermarkImageFile.value);
+  }
+  if (props.toType === 'compress') return compressImageQualityValidationKey(parameter.value);
+  if (props.toType === 'delete') return deletePageRangeValidationKey(parameter.value.pageRanges);
+  if (props.toType === 'encrypt') return encryptPasswordValidationKey(parameter.value.encryptUserPassword);
+  if (props.toType === 'pdfa' && !iccProfileFile.value) return 'pdfToolDetail.upload.errors.iccProfileRequired';
+  if (props.toType === 'insert' && parameter.value.insertActionType === 'FROM_PDF') return !insertTargetFile.value ? 'pdfToolDetail.upload.errors.insertFileCount' : insertSourcePageRangeValidationKey(parameter.value.sourcePages);
+  if (props.fromType === 'pdf' && ['png', 'jpg', 'img'].includes(props.toType)) return imageDpiValidationKey(parameter.value.imgDpi);
+  if (props.toType === 'merge' && ready.value.length < 2) return 'pdfToolDetail.upload.errors.mergeRequired';
+  if (props.toType === 'split' && (splitMode.value === 'custom' ? !splitCustomRanges(splitValue.value) : !Number.isInteger(splitCount.value) || splitCount.value < 1)) return 'batchTools.splitInvalid';
+  return null;
 });
 
-function defaultSettingsOpen(nextFromType = props.fromType, nextToType = props.toType): boolean {
-  void nextFromType;
-  void nextToType;
-  return true;
-}
-
-// ---- emit updateStatus on every file.status change (for StepTitle) ----
-watch(
-  () => file.value,
-  (val) => {
-    emit('updateStatus', val?.status ?? '');
-  },
-  { deep: true },
-);
-
-// reset when the tool changes (user navigates to a different tool)
-watch(
-  () => [props.accept, props.fromType, props.toType],
-  ([newAccept, newFromType, newToType]) => {
-    reset();
-    settingsOpen.value = defaultSettingsOpen(String(newFromType), String(newToType));
-    void newAccept;
-  },
-);
-
-// ---- file selection / validation ------------------------------------------
-
-function matchesAccept(accept: string, ext: string): boolean {
-  return accept.toLowerCase().indexOf(ext.toLowerCase()) >= 0;
-}
-
-/**
- * Shared selection validation for both the file-input change path and the
- * drag-drop path. Returns the i18n key of the first violated rule, or null
- * when the selection is acceptable. Keeps the two entry points consistent so
- * a dropped file can't bypass the size / extension / merge-limit checks.
- */
-function validateSelection(fileArray: File[]): string | null {
-  if (fileArray.some((f) => f.size === 0)) {
-    return 'pdfToolDetail.upload.errors.apiCodes.fileEmpty';
-  }
-  if (isPdfStandardTool.value && fileArray.length > 1) {
-    return 'pdfToolDetail.upload.errors.pdfaFileLimit';
-  }
-  if (props.endpoint.kind === 'pdf' && fileArray.some((f) => !f.name.toLowerCase().endsWith('.pdf'))) {
-    return 'pdfToolDetail.upload.errors.invalidPdf';
-  }
-  if (props.toType === 'merge') {
-    const existing = isAddingFiles.value && file.value?.rawFiles ? file.value.rawFiles.length : 0;
-    if (existing + fileArray.length > 5) return 'pdfToolDetail.upload.errors.mergeFileLimit';
+function rowRuleError(row: FileRow): string | null {
+  if (row.validation) return row.validation;
+  if (hasFilePageRange.value) {
+    const range = normalizedFileRange(row.pageRange);
+    if (parsePages(range) === null) return 'batchTools.stamp.errors.pages';
   }
   return null;
 }
+const canStart = computed(() => !locked.value && !readingFolder.value && !validationKey.value && ready.value.some((row) => !rowRuleError(row)));
+const effectiveEndpoint = computed<Endpoint>(() => props.toType === 'insert' && parameter.value.insertActionType === 'BLANK' ? { kind: 'pdf', op: 'insert-blank' } : props.endpoint);
+const useSync = computed(() => props.toType === 'split' || props.toType === 'encrypt' || (props.toType === 'addWatermark' && parameter.value.watermarkType === 'image') || !buildBatchRequest(effectiveEndpoint.value));
 
-function handleChange(e: Event) {
-  const target = e.target as HTMLInputElement;
-  const files = target.files;
-  if (!files || files.length === 0) return;
-  const fileArray = Array.from(files);
-  const err = validateSelection(fileArray);
-  if (err) { errorText.value = t(err); return; }
-  uploadFiles(fileArray);
+function normalizedFileRange(value: string): string {
+  return value.trim().toLowerCase().replace(/[、，]/g, ',').replace(/\s*([,-])\s*/g, '$1') || 'all';
 }
 
-function uploadFiles(fileList: File[]) {
-  if (fileList.length === 0) return;
-  const postFile = fileList[0];
-  const splitName = postFile.name.split('.');
-  const formate = splitName[splitName.length - 1].toLowerCase();
-
-  if (!matchesAccept(props.accept, formate)) {
-    errorText.value = t('pdfToolDetail.upload.errors.invalidPdf');
-    return;
-  }
-  errorText.value = '';
-
-  // merge append flow: adding more files to an existing merge list
-  if (isAddingFiles.value && file.value?.rawFiles && canSelectMultiple.value) {
-    isAddingFiles.value = false;
-    file.value.rawFiles = [...file.value.rawFiles, ...fileList];
-    if (props.toType === 'merge') {
-      const p = parameter.value as UploadParameter & { mergeFilePageRanges?: string[]; mergePasswords?: string[] };
-      p.mergeFilePageRanges = [...(p.mergeFilePageRanges ?? []), ...fileList.map(() => '')];
-      p.mergePasswords = [...(p.mergePasswords ?? []), ...fileList.map(() => '')];
-    }
-    return;
-  }
-
-  const noConversion = ['pdf', 'img'].includes(props.fromType) && props.mode !== 'multiple';
-  const conversion = formate === 'pdf';
-  // selectType only fires for a generic converter with an empty toType.
-  const selectTypeBranch = !props.toType && props.mode === 'multiple' && conversion && !replace.value;
-  const status: FileStatus = selectTypeBranch
-    ? 'selectType'
-    : noConversion || conversion
-      ? 'await'
-      : 'uploading';
-
-  file.value = { status, name: postFile.name, percentage: 0, raw: postFile };
-  settingsOpen.value = defaultSettingsOpen();
-  if (canSelectMultiple.value) file.value.rawFiles = fileList;
-
-  if (props.toType === 'merge') {
-    const p = parameter.value as UploadParameter & { mergeFilePageRanges?: string[]; mergePasswords?: string[] };
-    p.mergeFilePageRanges = fileList.map((_, i) => p.mergeFilePageRanges?.[i] ?? '');
-    p.mergePasswords = fileList.map((_, i) => p.mergePasswords?.[i] ?? '');
-  }
-
-  disabled.value = true;
-  if (status === 'uploading') {
-    void upload(postFile);
-  }
-}
-
-function handleClick(action?: 'add' | 'replace') {
-  if (isTaskRunning.value) return;
-  if (action === 'replace') {
-    replace.value = true;
-    Converting.value = false;
-    if (file.value) file.value.percentage = null;
-    init();
-  } else if (action === 'add') {
-    isAddingFiles.value = true;
-    replace.value = false;
-  } else {
-    if (disabled.value) return;
-    init();
-  }
-  errorText.value = '';
-  if (input.value) {
-    input.value.value = '';
-    input.value.click();
-  }
-}
-
-function onDrop(e: DragEvent) {
-  if (disabled.value) return;
-  dragover.value = false;
-  const files = e.dataTransfer?.files;
-  if (!files) return;
-  const fileArray = Array.from(files);
-  const err = validateSelection(fileArray);
-  if (err) { errorText.value = t(err); return; }
-  init();
-  uploadFiles(fileArray);
-}
-
-function onDragover() {
-  if (!disabled.value) dragover.value = true;
-}
-
-function handleDelete() {
-  if (isTaskRunning.value) return;
-  init();
-  file.value = null;
-  errorText.value = '';
-  replace.value = false;
-  disabled.value = false;
-  Converting.value = false;
-  watermarkImageFile.value = null;
-  insertTargetFile.value = null;
-  if (watermarkImageInput.value) watermarkImageInput.value.value = '';
-  if (insertTargetInput.value) insertTargetInput.value.value = '';
-}
-
-// ---- convert / upload ------------------------------------------------------
-
-function handleConvert(val: boolean) {
-  if (!file.value) return;
-  if (props.fromType === 'pdf' && ['png', 'jpg', 'img'].includes(props.toType)) {
-    const validationKey = imageDpiValidationKey(parameter.value.imgDpi);
-    if (validationKey) {
-      errorText.value = t(validationKey);
-      return;
+function requestFor(row: FileRow): { field: string; payload: Record<string, unknown> } {
+  if (isStamp.value) return { field: 'request', payload: buildStampRequest(stampKind.value, stamp.value) };
+  // Removal endpoints operate on all pages by default and accept no page range.
+  if (isRemoval.value) return { field: 'request', payload: {} };
+  const config = { ...parameter.value, mergePasswords: ready.value.map((item) => item.password), mergeFilePageRanges: ready.value.map((item) => normalizedFileRange(item.pageRange)) };
+  if (props.toType === 'addWatermark') config.pageRanges = normalizedFileRange(config.pageRanges);
+  const result = buildRequest({ fromType: props.fromType, toType: props.toType, parameter: config, password: '', files: props.toType === 'merge' ? ready.value.map((item) => item.file) : [row.file], isCsvMerge: isCsvMerge.value === '1', watermarkImageFile: watermarkImageFile.value ?? undefined, insertTargetFile: insertTargetFile.value ?? undefined });
+  if (props.toType === 'split') {
+    if (splitMode.value === 'custom') result.payload.ranges = splitCustomRanges(splitValue.value);
+    else {
+      delete result.payload.ranges;
+      result.payload.splitMode = splitMode.value;
+      result.payload.splitCount = splitCount.value;
     }
   }
-  if (props.toType === 'addWatermark') {
-    const validationKey = watermarkValidationKey(parameter.value, watermarkImageFile.value);
-    if (validationKey) {
-      errorText.value = t(validationKey);
-      return;
-    }
-  }
-  if (props.toType === 'compress') {
-    const validationKey = compressImageQualityValidationKey(parameter.value);
-    if (validationKey) {
-      errorText.value = t(validationKey);
-      return;
-    }
-  }
-  if (props.toType === 'merge' && (file.value.rawFiles?.length ?? 0) < 2) {
-    errorText.value = t('pdfToolDetail.upload.errors.mergeRequired');
-    return;
-  }
-  if (props.toType === 'delete') {
-    const validationKey = deletePageRangeValidationKey(parameter.value.pageRanges);
-    if (validationKey) {
-      errorText.value = t(validationKey);
-      return;
-    }
-  }
-  if (props.toType === 'encrypt') {
-    const validationKey = encryptPasswordValidationKey(parameter.value.encryptUserPassword);
-    if (validationKey) {
-      errorText.value = t(validationKey);
-      return;
-    }
-  }
-  if (props.toType === 'insert' && parameter.value.insertActionType === 'FROM_PDF' && !insertTargetFile.value) {
-    errorText.value = t('pdfToolDetail.upload.errors.insertFileCount');
-    return;
-  }
-  if (props.toType === 'insert' && parameter.value.insertActionType === 'FROM_PDF') {
-    const validationKey = insertSourcePageRangeValidationKey(parameter.value.sourcePages);
-    if (validationKey) {
-      errorText.value = t(validationKey);
-      return;
-    }
-  }
-  if (props.toType === 'pdfa' && !iccProfileFile.value) {
-    errorText.value = t('pdfToolDetail.upload.errors.iccProfileRequired');
-    return;
-  }
-  if (props.mode === 'multiple') {
-    if (val) {
-      void upload(file.value.raw);
-      Converting.value = true;
-    } else {
-      if (!type.value) return;
-      init();
-      file.value.status = 'await';
-    }
-  } else {
-    void upload(file.value.raw);
-    Converting.value = true;
-  }
-  errorText.value = '';
+  return result;
 }
 
-/** selectType tile grid handler (generic converter only — not in current catalog). */
-function conversion(t_: string) {
-  type.value = t_;
-}
-
-function effectivePdfOp(op: PdfOp): PdfOp {
-  if (op === 'insert-from-pdf' && parameter.value.insertActionType === 'BLANK') {
-    return 'insert-blank';
-  }
-  return op;
-}
-
-function processPath(ep: Endpoint): string {
-  if (ep.kind === 'convert-target') return `/process/pdf/${ep.target}`;
-  if (ep.kind === 'convert-type') return `/process/${ep.type}`;
-  if (ep.kind === 'convert-to-pdf') return `/process/${ep.type ?? 'pdf'}`;
-  return '';
-}
-
-/**
- * Build the multipart FormData per the server contract and POST it as a
- * blob stream. Field names confirmed against the server controllers:
- *   - /process/pdf/merge            → files
- *   - /process/pdf/insert-from-pdf  → file + insertFile
- *   - /process/pdf/watermark/add    → file + imageFile
- *   - other /process/pdf/{op}       → file
- *   - /process/{source}/{target} → FileInterceptor('file'); the server maps the
- *     OpenAPI-style process path to target/type/convert-to-pdf upstream calls
- * buildRequest decides field='request' (pdf ops, password inline) vs
- * field='options' (conversions, password separate). A sibling `password` part
- * is appended ONLY when passwordField='separate' AND the password is non-empty
- * (the pdf controller's extractRequest DROPS a sibling password when `request`
- * is present, so pdf ops inject it inline via buildRequest).
- */
-async function upload(rawFile: File) {
-  if (!file.value) return;
-  if (input.value) input.value.value = '';
-
-  // Operation-specific secondary files are not included in this primary list.
-  let uploadFileList: File[];
-  if (props.toType === 'merge') {
-    uploadFileList = file.value.rawFiles ?? [rawFile];
-  } else {
-    uploadFileList = [rawFile];
-  }
-
-  const r = buildRequest({
-    toType: props.toType,
-    fromType: props.fromType,
-    parameter: parameter.value,
-    password: password.value,
-    files: uploadFileList,
-    insertTargetFile: insertTargetFile.value ?? undefined,
-    watermarkImageFile: watermarkImageFile.value ?? undefined,
-    isCsvMerge: isCsvMerge.value === '1',
-  });
-
-  const ep = props.endpoint;
-  const fd = new FormData();
-  const pdfOp = ep.kind === 'pdf' ? effectivePdfOp(ep.op) : null;
-
-  // 1. files — field name depends on the route (see contract above)
+async function runSync(row: FileRow, mergeRows?: FileRow[]) {
+  row.status = 'processing'; row.error = '';
+  const payload = { ...row.request };
+  const ep = effectiveEndpoint.value;
   if (ep.kind === 'pdf') {
-    if (pdfOp === 'merge') {
-      uploadFileList.forEach((f) => fd.append('files', f));
-    } else if (pdfOp === 'insert-from-pdf') {
-      fd.append('file', uploadFileList[0]);
-      if (r.extraFiles?.[0]) fd.append('insertFile', r.extraFiles[0]);
-    } else if (pdfOp === 'watermark/add') {
-      fd.append('file', uploadFileList[0]);
-      if (r.imageFile) fd.append('imageFile', r.imageFile);
-    } else if (pdfOp === 'pdfa') {
-      fd.append('file', uploadFileList[0]);
-      if (iccProfileFile.value) fd.append('iccFile', iccProfileFile.value);
-    } else {
-      fd.append('file', uploadFileList[0]);
-    }
-  } else {
-    fd.append('file', uploadFileList[0]);
+    if (props.toType === 'merge') payload.passwords = mergeRows!.map((item) => item.password || null);
+    else if (ep.op === 'insert-from-pdf') payload.targetPassword = row.password;
+    else if (row.password) payload.password = row.password;
   }
-
-  // 2. the parameter/options payload (JSON string under 'request' or 'options')
-  fd.append(r.field, JSON.stringify(r.payload));
-
-  // 3. password — separate field ONLY for conversions with a non-empty password
-  if (r.passwordField === 'separate' && password.value) {
-    fd.append('password', password.value);
-  }
-
-  // 4. route URL + flat fields (target/type) per the tool's Endpoint
-  let url = '';
-  if (ep.kind === 'pdf') {
-    url = `/process/pdf/${pdfOp}`;
-  } else if (ep.kind === 'convert-target') {
-    url = processPath(ep);
-  } else if (ep.kind === 'convert-type') {
-    url = processPath(ep);
-  } else {
-    url = processPath(ep);
-  }
-
+  const form = new FormData();
+  if (mergeRows) mergeRows.forEach((item) => form.append('files', item.file));
+  else form.append('file', row.file);
+  if (ep.kind === 'pdf' && ep.op === 'insert-from-pdf' && insertTargetFile.value) form.append('insertFile', insertTargetFile.value);
+  if (watermarkImageFile.value && props.toType === 'addWatermark') form.append('imageFile', watermarkImageFile.value);
+  if (iccProfileFile.value && props.toType === 'pdfa') form.append('iccFile', iccProfileFile.value);
+  form.append(row.field ?? 'request', JSON.stringify(payload));
+  if (ep.kind !== 'pdf' && row.password) form.append('password', row.password);
+  const url = ep.kind === 'pdf' ? `/process/pdf/${ep.op}` : ep.kind === 'convert-target' ? `/process/pdf/${ep.target}` : `/process/${ep.type}`;
   try {
-    const res = await apiClient.post(url, fd, {
-      responseType: 'blob',
-      onUploadProgress: (e: AxiosProgressEvent) => {
-        if (file.value) file.value.percentage = Math.floor((e.loaded / (e.total || 1)) * 100);
-      },
-    });
-    Converting.value = false;
-    blobResponse.value = res as AxiosResponse<Blob>;
-    file.value.status = 'success';
-    downloadBlob(res as AxiosResponse<Blob>, fallbackFilename());
-  } catch (err) {
-    Converting.value = false;
-    errorText.value = apiErrorMessage(await toApiError(err));
-    disabled.value = false;
-    if (file.value) file.value.percentage = null;
+    const response = await apiClient.post<Blob>(url, form, { responseType: 'blob', signal: abortController.signal });
+    if (!alive) return;
+    const blob = props.toType === 'split' ? await nameSplitOutputs(response.data, row.file.name, splitSeparator.value) : response.data;
+    const filename = parseContentDispositionFilename(response.headers['content-disposition']) ?? row.file.name.replace(/\.[^.]+$/, props.toType === 'split' ? '.zip' : '.pdf');
+    for (const item of mergeRows ?? [row]) Object.assign(item, { status: 'success', result: blob, outputName: filename, error: '' });
+  } catch (error) {
+    const message = await localError(error);
+    for (const item of mergeRows ?? [row]) Object.assign(item, { status: 'failed', error: message });
   }
 }
 
-function apiErrorMessage(error: Awaited<ReturnType<typeof toApiError>>): string {
-  const key = apiErrorKey(error);
-  return key ? t(`pdfToolDetail.upload.errors.apiCodes.${key}`) : error.message;
-}
-
-function apiErrorKey(error: Awaited<ReturnType<typeof toApiError>>): string | null {
-  return apiErrorTranslationKey(error, props.endpoint.kind === 'pdf' ? 'pdf' : 'conversion');
-}
-
-function downloadFile() {
-  if (blobResponse.value) {
-    downloadBlob(blobResponse.value, fallbackFilename());
+function applyBatch(batch: BatchInfo) {
+  for (const item of batch.items) {
+    const row = rows.value.find((file) => file.itemId === item.itemId);
+    if (!row) continue;
+    row.status = item.status; row.outputName = item.outputName;
+    const key = item.failureCode ? apiErrorTranslationKey({ code: Number(item.failureCode), errorCode: item.failureCode, message: item.failureReason ?? '' }, props.endpoint.kind === 'pdf' ? 'pdf' : 'conversion') : null;
+    row.error = item.failureReason ? (key ? t(`pdfToolDetail.upload.errors.apiCodes.${key}`) : item.failureReason) : '';
   }
 }
-
-function reset() {
-  init();
-  file.value = null;
-  disabled.value = false;
-  Converting.value = false;
-  settingsOpen.value = defaultSettingsOpen();
+function waitForPoll() {
+  return new Promise<void>((resolve) => { releaseWait = resolve; timer = setTimeout(resolve, 1000); });
+}
+async function poll() {
+  pollFailed.value = false;
+  try {
+    while (alive && activeBatch.value) {
+      const batch = await batchApi.status(activeBatch.value);
+      if (!alive) return;
+      applyBatch(batch);
+      if (['success', 'partial_success', 'failed', 'canceled'].includes(batch.status)) return;
+      // Recover an uncertain commit response without creating or reuploading a batch.
+      if (batch.status === 'draft') await batchApi.submit(batch.batchId);
+      await waitForPoll();
+    }
+  } catch (error) { pollFailed.value = true; errorText.value = `${t('batchTools.pollingFailed')} ${await localError(error)}`; }
+  finally { if (alive) running.value = false; }
+}
+async function resumePolling() {
+  if (running.value) return;
+  running.value = true; errorText.value = ''; await poll();
 }
 
-function init() {
-  parameter.value = defaultParameter();
-  password.value = '';
-  isCsvMerge.value = '0';
-  watermarkImageFile.value = null;
-  insertTargetFile.value = null;
-  iccProfileFile.value = null;
-  if (watermarkImageInput.value) watermarkImageInput.value.value = '';
-  if (insertTargetInput.value) insertTargetInput.value.value = '';
-  if (iccProfileInput.value) iccProfileInput.value.value = '';
-}
-
-// Hidden-input handlers for operation-specific secondary files. These
-// inputs live here because UploadPanel owns the refs upload() needs; ParamForm
-// triggers their .click() and receives the selected filename through v-models.
-function handleWatermarkImageChange(e: Event) {
-  const target = e.target as HTMLInputElement;
-  const selected = target.files?.[0];
-  if (!selected) return;
-  if (!/\.(jpe?g|png|bmp)$/i.test(selected.name)) {
-    errorText.value = t('pdfToolDetail.upload.errors.invalidWatermarkImage');
-    target.value = '';
-    return;
+async function start() {
+  if (!canStart.value) return;
+  errorText.value = ''; started.value = true; running.value = true; filter.value = 'all';
+  const candidates = rows.value.filter((row) => row.status === 'ready');
+  for (const row of candidates) {
+    const error = rowRuleError(row);
+    if (error) { row.status = 'failed'; row.error = t(error); }
+    else { const request = requestFor(row); row.request = request.payload; row.field = request.field; }
   }
-  errorText.value = '';
-  watermarkImageFile.value = selected;
-  target.value = '';
+  const valid = candidates.filter((row) => row.status === 'ready');
+  try {
+    if (!valid.length) return;
+    if (useSync.value) {
+      if (props.toType === 'merge') await runSync(valid[0]!, valid);
+      else for (const row of valid) { if (!alive) break; await runSync(row); }
+      return;
+    }
+    const shared = { ...valid[0]!.request };
+    // Let each SDK output inherit its own source filename, not the first file's.
+    if (!parameter.value.outputFileName.trim()) { delete shared.outputFileName; delete shared.zipFileName; }
+    const request = buildBatchRequest(effectiveEndpoint.value, shared, randomUuid())!;
+    const batch = await batchApi.create(request);
+    if (!alive) return;
+    activeBatch.value = batch.batchId;
+    for (const row of valid) {
+      if (!alive) return;
+      row.status = 'uploading';
+      try {
+        const item = row.path !== row.file.name
+          ? await batchApi.upload(batch.batchId, row.file, row.password, row.path)
+          : await batchApi.upload(batch.batchId, row.file, row.password);
+        row.itemId = item.itemId; row.batchId = batch.batchId; row.status = item.status;
+      } catch (error) { row.status = 'failed'; row.error = await localError(error); }
+    }
+    if (!valid.some((row) => row.itemId)) return;
+    if (!alive) return;
+    await batchApi.submit(batch.batchId);
+    await poll();
+  } catch (error) {
+    errorText.value = await localError(error);
+    if (activeBatch.value && valid.some((row) => row.itemId)) pollFailed.value = true;
+    else for (const row of valid) if (row.status === 'ready') { row.status = 'failed'; row.error = errorText.value; }
+  } finally { if (alive) running.value = false; }
 }
 
-function handleInsertTargetChange(e: Event) {
-  const target = e.target as HTMLInputElement;
-  const selected = target.files?.[0];
-  if (!selected) return;
-  if (!selected.name.toLowerCase().endsWith('.pdf')) {
-    errorText.value = t('pdfToolDetail.upload.errors.invalidPdf');
-    target.value = '';
-    return;
+async function retryRows(targets: FileRow[]) {
+  if (running.value || pollFailed.value || !targets.length) return;
+  running.value = true; errorText.value = '';
+  try {
+    if (props.toType === 'merge') {
+      const originalInputs = rows.value.filter((row) => row.request);
+      if (originalInputs.length >= 2) await runSync(originalInputs[0]!, originalInputs);
+      return;
+    }
+    let remoteRetry = false;
+    for (const row of targets) {
+      if (!alive) break;
+      if (row.itemId) {
+        try { await batchApi.retry(row.itemId, { password: row.password }); row.status = 'queued'; row.error = ''; activeBatch.value = row.batchId!; remoteRetry = true; }
+        catch (error) {
+          row.error = await localError(error);
+          // The retry may have been accepted before its response was lost.
+          // Reconcile this batch instead of stranding an already-running item.
+          activeBatch.value = row.batchId!;
+          remoteRetry = true;
+        }
+      } else {
+        const validation = rowRuleError(row);
+        if (validation) { row.error = t(validation); continue; }
+        if (!row.request) {
+          const request = requestFor(row);
+          row.request = request.payload;
+          row.field = request.field;
+        }
+        await runSync(row);
+      }
+    }
+    if (remoteRetry) await poll();
+  } finally { if (alive) running.value = false; }
+}
+
+async function resultFor(row: FileRow): Promise<Blob> {
+  if (row.result) return row.result;
+  const response: AxiosResponse<Blob> = await batchApi.downloadItem(row.itemId!);
+  return response.data;
+}
+async function download(row: FileRow) {
+  try {
+    const snapshot = { ...row };
+    const blob = await resultFor(snapshot);
+    if (alive) saveBlob(blob, snapshot.outputName ?? snapshot.file.name);
   }
-  errorText.value = '';
-  insertTargetFile.value = selected;
-  target.value = '';
+  catch (error) { errorText.value = await localError(error); }
+}
+async function downloadAll() {
+  if (downloading.value || !successes.value.length) return;
+  downloading.value = true;
+  try {
+    if (props.toType === 'merge') {
+      const row = { ...successes.value[0]! };
+      const blob = await resultFor(row);
+      if (alive) saveBlob(blob, row.outputName ?? row.file.name.replace(/\.[^.]+$/, '.pdf'));
+      return;
+    }
+    const files: Record<string, Uint8Array> = Object.create(null);
+    const unique = successes.value.map((row) => ({ ...row }));
+    for (const [index, row] of unique.entries()) {
+      const directory = row.path.includes('/') ? row.path.slice(0, row.path.lastIndexOf('/') + 1) : '';
+      let name = (directory + (row.outputName ?? row.file.name)).split(/[\\/]/).filter((part) => part && part !== '.' && part !== '..').join('/');
+      if (files[name]) name = `${index + 1}-${name}`;
+      files[name] = new Uint8Array(await (await resultFor(row)).arrayBuffer());
+      if (!alive) return;
+    }
+    const archive = await zipFiles(files);
+    if (alive) saveBlob(archive, `${props.toolSlug}-results.zip`);
+  } catch (error) { errorText.value = await localError(error); }
+  finally { downloading.value = false; }
 }
 
-function handleIccProfileChange(e: Event) {
-  const target = e.target as HTMLInputElement;
-  const selected = target.files?.[0];
-  if (selected) setIccProfile(selected);
-  target.value = '';
+function sizeLabel(bytes: number) { return bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`; }
+function rowStatus(row: FileRow) { return t(`batchTools.${row.validation ? 'invalid' : row.status === 'success' ? 'processed' : row.status === 'failed' || row.status === 'canceled' ? 'processingFailed' : row.status === 'ready' ? 'ready' : row.status === 'uploading' ? 'uploading' : row.status === 'processing' ? 'processing' : 'waiting'}`); }
+function rowError(row: FileRow): string {
+  const key = ruleErrors.value.get(row.id);
+  return row.error || (key ? t(key) : '');
 }
-
-function handleIccProfileDrop(selected: File) {
-  setIccProfile(selected);
+async function primaryAction() {
+  if (filesDisabled.value) return;
+  if (!started.value) { await start(); return; }
+  const retryable = failures.value.filter(canRetryRow);
+  if (retryable.length) await retryRows(retryable);
+  else if (!failures.value.length) { editAgain(); await start(); }
 }
-
-function setIccProfile(selected: File) {
-  if (!/\.(icc|icm)$/i.test(selected.name)) {
-    errorText.value = t('pdfToolDetail.upload.errors.invalidIccProfile');
-    return;
-  }
-  errorText.value = '';
-  iccProfileFile.value = selected;
+function canRetryRow(row: FileRow): boolean {
+  return row.status === 'failed' && (!!row.itemId || !!row.request);
 }
-
-/**
- * Per-file delete in the merge list (ParamForm's `delete-merge-file` event).
- * UploadPanel owns rawFiles, so it owns the splice across all three parallel
- * arrays (rawFiles + mergeFilePageRanges + mergePasswords). When the last file
- * is removed, fall through to a full reset.
- */
-function handleMergeFileDelete(index: number) {
-  if (!file.value?.rawFiles) return;
-  file.value.rawFiles.splice(index, 1);
-  const p = parameter.value as UploadParameter & { mergeFilePageRanges?: string[]; mergePasswords?: string[] };
-  p.mergeFilePageRanges?.splice(index, 1);
-  p.mergePasswords?.splice(index, 1);
-  if (file.value.rawFiles.length === 0) {
-    handleDelete();
-  }
+function pickAuxiliary(event: Event, kind: 'image' | 'insert' | 'icc') {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0] ?? null; target.value = '';
+  if (locked.value) return;
+  if (kind === 'image') watermarkImageFile.value = file;
+  else if (kind === 'insert') insertTargetFile.value = file;
+  else iccProfileFile.value = file;
 }
-
-function outputExtension(toType: string, ep: Endpoint): string {
-  if (ep.kind === 'pdf') return ep.op === 'split' ? 'zip' : 'pdf';
-  if (toType === 'searchablePdf') return 'pdf';
-  if (toType === 'markdown') return 'md';
-  return toType || 'pdf';
-}
-
-function fallbackFilename(): string {
-  const explicit = parameter.value.outputFileName.trim();
-  if (explicit) return explicit;
-  const base = file.value?.raw?.name?.replace(/\.[^.]+$/, '') || 'output';
-  const suffix = props.toType === 'delete' ? '-deleted-pages' : '';
-  return `${base}${suffix}.${outputExtension(props.toType, props.endpoint)}`;
-}
+onBeforeUnmount(() => { alive = false; abortController.abort(); clearTimeout(timer); releaseWait?.(); });
 </script>
 
 <template>
-  <!-- success card -->
-  <div v-if="file && file.status === 'success'" class="success-card">
-    <div class="success-main">
-      <div class="success-copy">
-        <div class="success-hero" aria-hidden="true">
-          <SuccessIcon class="success-icon" />
-        </div>
-        <h2 class="success-title">{{ t('pdfToolDetail.upload.successTitle') }}</h2>
-      </div>
-      <div class="success-file-wrap">
-        <div class="success-file">
-          <DocumentIcon class="success-file-icon" />{{ fallbackFilename() }}
-        </div>
-      </div>
-      <div class="success-actions">
-        <button class="btn download-btn success-action-btn" @click="downloadFile">
-          <DownloadIcon class="btn-icon" />{{ t('pdfToolDetail.upload.downloadFile') }}
-        </button>
-        <button class="reset" @click="reset">
-          <LoadingIcon class="reset-icon" />{{ t('pdfToolDetail.upload.startOver') }}
-        </button>
-      </div>
-    </div>
-    <div v-if="!isFormalLicense" class="trial-limit-banner">
-      <span class="trial-limit-icon">!</span>
-      <p>{{ t('pdfToolDetail.upload.trialLimit') }}</p>
-      <a href="https://www.compdf.com/contact-sales" target="_blank">{{ t('pdfToolDetail.upload.upgradeNow') }}</a>
-    </div>
-  </div>
+  <TooltipProvider :delay-duration="150">
+    <section class="batch-panel" :class="{ 'is-processing': running, 'is-completed': completed }"
+      :aria-busy="running || readingFolder" @dragenter.prevent="!filesDisabled && !draggingId && dragDepth++"
+      @dragleave.prevent="dragDepth = Math.max(0, dragDepth - 1)" @dragover.prevent @drop.prevent="drop">
+      <input ref="input" name="files" class="hidden-input" type="file" :accept="accept" multiple
+        :disabled="filesDisabled" @change="changeFiles">
+        <input ref="folderInput" name="folder" class="hidden-input" type="file" webkitdirectory multiple
+          :disabled="filesDisabled" @change="changeFiles">
+          <input ref="imageInput" class="hidden-input" type="file" accept="image/*"
+            @change="pickAuxiliary($event, 'image')">
+            <input ref="insertInput" class="hidden-input" type="file" accept=".pdf"
+              @change="pickAuxiliary($event, 'insert')">
+              <input ref="iccInput" class="hidden-input" type="file" accept=".icc,.icm"
+                @change="pickAuxiliary($event, 'icc')">
 
-  <div
-    v-else
-    class="converter-wrapper"
-    :class="{ hover: onDragenter && !file, params: file && file.status === 'await', 'no-pad': !file }"
-    @dragover="onDragenter = true"
-    @dragleave="onDragenter = false"
-  >
-    <template v-if="file && file.status === 'await'">
-      <div v-if="mode === 'multiple' && typeMapping[argument]" class="await-header">
-        <component :is="typeMapping[argument].icon" class="await-header-icon" />
-        {{ t('pdfToolDetail.upload.pdfTo', { type: typeMapping[argument].title }) }}
-      </div>
+                <div v-if="!rows.length" class="empty-upload" :class="{ 'drag-active': dragDepth > 0 }">
+                  <div class="upload-actions">
+                    <button type="button" class="primary" :disabled="readingFolder" @click="input?.click()">
+                      <UploadIcon />{{ t('batchTools.addFiles') }}
+                    </button>
+                    <button type="button" class="outline" :disabled="readingFolder" @click="folderInput?.click()">
+                      <FolderIcon />{{ t('batchTools.uploadFolder') }}
+                    </button>
+                  </div>
+                  <p>{{ readingFolder ? t('batchTools.processing') : t('batchTools.dropHint') }}</p>
+                  <p class="formats">{{ t('batchTools.supportedFormats', { formats: accept.split(',').join(', ') }) }}
+                  </p>
+                </div>
 
-      <div class="await-actions">
-        <button
-          type="button"
-          class="select-more"
-          :disabled="isTaskRunning"
-          @click="handleClick(canSelectMultiple ? 'add' : 'replace')"
-        >
-          {{ t('pdfToolDetail.upload.selectFile') }}
-        </button>
-      </div>
+                <template v-else>
+                  <div v-if="dragDepth && !filesDisabled" class="drop-overlay">{{ t('batchTools.dropHint') }}</div>
+                  <div class="workspace-grid"
+                    :class="{ 'without-settings': !hasSettings, 'initial-file-ranges': hasFilePageRange && !started }">
+                    <div class="documents-column">
+                      <section class="documents card">
+                        <div class="document-heading">
+                          <h2>{{ t('batchTools.documentList') }}</h2>
+                          <div v-if="completed" class="result-actions">
+                            <button type="button" class="small-button" :disabled="filesDisabled" @click="editAgain">
+                              <ResetIcon />{{ t('batchTools.resetParameters') }}
+                            </button>
+                            <button type="button" class="small-button result-download"
+                              :disabled="filesDisabled || !successes.length" @click="downloadAll">
+                              <DownloadIcon />{{ t('batchTools.downloadAll') }}
+                            </button>
+                          </div>
+                        </div>
+                        <div v-if="completed" class="result-summary" aria-live="polite">
+                          <div class="summary-card total"><span>{{ t('batchTools.totalFiles') }}</span><strong>{{
+                            rows.length }}</strong></div>
+                          <div class="summary-card successful"><span>{{ t('batchTools.success') }}</span><strong>{{
+                            successes.length }}</strong></div>
+                          <div class="summary-card failure"><span>{{ t('batchTools.failure') }}</span><strong>{{
+                            failures.length }}</strong></div>
+                        </div>
+                        <div v-if="completed && isTrialLicense" class="trial-banner">
+                          <WarningIcon />
+                          <p>{{ t('batchTools.trialLimit') }}</p><a :href="upgradeUrl" target="_blank"
+                            rel="noopener noreferrer">{{ t('pdfToolDetail.upload.upgradeNow') }}</a>
+                        </div>
+                        <div class="list-toolbar">
+                          <div v-if="started" class="filters" :aria-label="t('batchTools.status')">
+                            <button v-for="tab in (['all', 'success', 'failure'] as const)" :key="tab" type="button"
+                              :class="{ active: filter === tab }" :aria-pressed="filter === tab"
+                              @click="filter = tab">{{ t(`batchTools.${tab}`) }} <span>{{ tab === 'all' ? rows.length :
+                                tab === 'success' ? successes.length : failures.length }}</span></button>
+                          </div>
+                          <div class="list-actions">
+                            <details ref="uploadMenu" class="add-menu" :class="{ disabled: filesDisabled }">
+                              <summary :aria-disabled="filesDisabled" @click="filesDisabled && $event.preventDefault()">
+                                <UploadOutlineIcon />{{ t('batchTools.uploadFiles') }}
+                                <ChevronIcon />
+                              </summary>
+                              <div><button type="button" :disabled="filesDisabled" @click="input?.click()">{{
+                                t('batchTools.addFiles') }}</button><button type="button" :disabled="filesDisabled"
+                                  @click="folderInput?.click()">{{ t('batchTools.uploadFolder') }}</button></div>
+                            </details>
+                            <button type="button" class="small-button" :disabled="running || downloading || pollFailed"
+                              @click="clearList">
+                              <ClearIcon />{{ t('batchTools.clearList') }}
+                            </button>
+                          </div>
+                        </div>
+                        <div v-if="running || pollFailed" class="progress-panel" aria-live="polite">
+                          <img :src="spinnerUrl" class="processing-spinner" alt="">
+                          <div class="progress-heading"><span>{{ pollFailed ? t('batchTools.pollingFailed') :
+                            t('batchTools.processing') }}</span><span>{{ processed }}/{{ rows.length }}</span></div>
+                          <div class="progress-track"><progress :value="progress" max="100"
+                              :aria-label="t('batchTools.processing')" /><span>{{ progress }}%</span></div>
+                          <p v-if="currentFile">{{ t('batchTools.currentFile') }} {{ currentFile }}</p>
+                        </div>
+                        <div class="table-scroll">
+                          <table :class="{ 'result-table': started, 'file-range-table': hasFilePageRange }">
+                            <thead>
+                              <tr>
+                                <th class="order-col"></th>
+                                <th>{{ t('batchTools.fileName') }}</th>
+                                <th>{{ t('batchTools.size') }}</th>
+                                <th>{{ t('batchTools.password') }}</th>
+                                <th v-if="hasFilePageRange" class="page-range-cell">{{
+                                  t('pdfToolDetail.upload.settings.pageRange') }}</th>
+                                <th v-if="started" class="status-cell">{{ t('batchTools.status') }}</th>
+                                <th class="actions-cell">{{ t('batchTools.actions') }}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr v-for="row in visibleRows" :key="row.id"
+                                :class="{ failed: row.status === 'failed' || ruleErrors.get(row.id) }"
+                                @drop.stop.prevent="dropRow(row.id)">
+                                <td class="order-col"><button type="button" class="drag-handle" :draggable="!locked"
+                                    :disabled="locked"
+                                    :aria-label="`${t('batchTools.moveUp')} / ${t('batchTools.moveDown')}: ${row.file.name}`"
+                                    @dragstart.stop="draggingId = row.id" @dragend="draggingId = ''"
+                                    @keydown.up.prevent="moveRow(row.id, -1)"
+                                    @keydown.down.prevent="moveRow(row.id, 1)">
+                                    <DragHandleIcon />
+                                  </button></td>
+                                <td class="name-cell"><button type="button" class="file-name" :title="row.path"
+                                    :aria-pressed="selected?.id === row.id" @click="selectedId = row.id">
+                                    <DocumentIcon /><span>{{ row.file.name }}</span>
+                                  </button><small v-if="!started && (ruleErrors.get(row.id) || row.error)"
+                                    class="error">{{ row.error || t(ruleErrors.get(row.id)!) }}</small></td>
+                                <td class="size-cell">{{ sizeLabel(row.file.size) }}</td>
+                                <td>
+                                  <div class="password-field">
+                                    <LockIcon /><input v-model="row.password"
+                                      :type="row.showPassword ? 'text' : 'password'" maxlength="512" autocomplete="off"
+                                      :aria-label="`${t('batchTools.password')}: ${row.file.name}`"
+                                      :placeholder="t('batchTools.passwordPlaceholder')"
+                                      :disabled="running || row.status === 'success'"><button
+                                        type="button" :disabled="running"
+                                        :aria-label="`${t('batchTools.password')}: ${row.file.name}`"
+                                        :aria-pressed="row.showPassword" @click="row.showPassword = !row.showPassword">
+                                        <EyeOffIcon />
+                                      </button>
+                                  </div>
+                                </td>
+                                <td v-if="hasFilePageRange" class="page-range-cell">
+                                  <input v-model="row.pageRange" class="file-page-range" type="text"
+                                    :aria-label="`${t('pdfToolDetail.upload.settings.pageRange')}: ${row.file.name}`"
+                                    :aria-invalid="!!ruleErrors.get(row.id)"
+                                    :aria-describedby="ruleErrors.get(row.id) ? `range-error-${row.id}` : undefined"
+                                    :placeholder="t('batchTools.stamp.allPages')" :disabled="locked">
+                                    <span v-if="ruleErrors.get(row.id)" :id="`range-error-${row.id}`" class="sr-only">{{
+                                      t(ruleErrors.get(row.id)!) }}</span>
+                                </td>
+                                <td v-if="started" class="status-cell">
+                                  <Tooltip>
+                                    <TooltipTrigger as-child><button type="button" class="status-badge"
+                                        :class="row.status" :aria-label="rowError(row) || rowStatus(row)">
+                                        <SuccessIcon v-if="row.status === 'success'" />
+                                        <FailedIcon
+                                          v-else-if="row.status === 'failed' || row.status === 'canceled' || row.validation" />
+                                        <WaitingIcon v-else /><span class="sr-only">{{ rowStatus(row) }} {{
+                                          rowError(row) }}</span>
+                                      </button></TooltipTrigger>
+                                    <TooltipContent>{{ rowError(row) || rowStatus(row) }}</TooltipContent>
+                                  </Tooltip>
+                                </td>
+                                <td>
+                                  <div class="row-actions"><button v-if="row.status === 'success' && toType !== 'merge'" type="button"
+                                      :title="t('batchTools.download')" :aria-label="t('batchTools.download')"
+                                      @click="download(row)">
+                                      <DownloadIcon />
+                                    </button><button v-if="canRetryRow(row)" type="button"
+                                      :disabled="running || pollFailed" :title="t('batchTools.retry')"
+                                      :aria-label="t('batchTools.retry')" @click="retryRows([row])">
+                                      <RetryIcon />
+                                    </button><button v-if="!(toType === 'merge' && started)" type="button"
+                                      :disabled="running || downloading || pollFailed || (toType === 'merge' && started)"
+                                      :title="t('batchTools.delete')" :aria-label="t('batchTools.delete')"
+                                      @click="removeRow(row.id)">
+                                      <DeleteIcon />
+                                    </button></div>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                        <div v-if="!started && (rows.length > 5 || failures.length)" class="list-footer">
+                          <button v-if="!started && rows.length > 5" type="button" class="text-button"
+                            @click="expanded = !expanded">{{ t(expanded ? 'batchTools.collapseList' :
+                              'batchTools.expandAll') }}</button>
+                          <button v-if="!started && failures.length" type="button" class="text-button"
+                            @click="rows = rows.filter(row => !ruleErrors.get(row.id))">{{ t('batchTools.removeInvalid')
+                            }}</button>
+                        </div>
+                      </section>
+                    </div>
 
-      <div class="name">
-        <div class="name-list">
-          <div
-            v-for="selectedFile in selectedFiles"
-            :key="`${selectedFile.name}-${selectedFile.size}-${selectedFile.lastModified}`"
-            class="name-item"
-          >
-            <PdfIcon class="name-item-icon" /> {{ selectedFile.name }}
-          </div>
-        </div>
-        <button type="button" class="name-delete" :disabled="isTaskRunning" @click.stop="handleDelete">
-          <DeleteIcon />
-        </button>
-      </div>
-
-      <div class="frame"></div>
-
-      <div v-if="!['pdf', 'img'].includes(fromType)" class="err-text" >{{ errorText }}</div>
-
-      <Collapsible
-        v-model:open="settingsOpen"
-        class="settings-row"
-        :class="{
-          'split-settings-row': isSplitTool,
-          'markdown-settings-row': toType === 'markdown',
-        }"
-      >
-        <CollapsibleTrigger v-if="fromType !== 'img' && toType !== 'merge'" as-child>
-          <div class="settings-toggle">
-            <UnFoldIcon v-if="!settingsOpen" />
-            <FoldIcon v-else />
-          </div>
-        </CollapsibleTrigger>
-        <CollapsibleContent class="settings-body">
-          <ParamForm
-            v-if="file.status === 'await'"
-            v-model:parameter="parameter"
-            v-model:password="password"
-            v-model:is-csv-merge="isCsvMerge"
-            v-model:watermark-image-file="watermarkImageFile"
-            v-model:insert-target-file="insertTargetFile"
-            v-model:icc-profile-file="iccProfileFile"
-            :from-type="fromType"
-            :to-type="toType"
-            :files="selectedFiles"
-            :converting="Converting"
-            @pick-watermark-image="watermarkImageInput?.click()"
-            @pick-insert-target="insertTargetInput?.click()"
-            @pick-icc-profile="iccProfileInput?.click()"
-            @drop-icc-profile="handleIccProfileDrop"
-            @delete-merge-file="handleMergeFileDelete"
-            @delete-file="handleDelete"
-          />
-        </CollapsibleContent>
-      </Collapsible>
-
-      <div v-if="['pdf', 'img'].includes(fromType)" class="err-text" >{{ errorText }}</div>
-
-      <!-- convert / progress / converting buttons -->
-      <button v-if="!file.percentage" type="button" class="btn select-btn action-btn" @click="handleConvert(true)">
-        {{ convertButtonLabel }}
-      </button>
-      <div v-else-if="file.status === 'await' && file.percentage !== 100" class="btn upload-btn action-btn">
-        <div class="progress-bar" :style="{ maxWidth: (file.percentage || 0) + '%' }"></div>
-        <div class="uploading-text">
-          {{ actionInProgressText }} - {{ file.percentage }}%
-        </div>
-      </div>
-      <div v-else-if="file.status === 'await' && file.percentage === 100" class="btn converting-btn action-btn">
-        <LoadingIcon class="btn-icon spin" />{{ actionInProgressText }}
-      </div>
-    </template>
-
-    <!-- drag / select zone (no file yet) OR selectType grid OR uploading -->
-    <div
-      class="upload-dragger"
-      :class="{ 'is-dragover': dragover, hidden: file && file.status === 'await', processing: file?.status === 'uploading' }"
-      @drop.prevent="onDrop"
-      @dragover.prevent="onDragover"
-      @dragleave.prevent="dragover = false"
-    >
-      <template v-if="!file">
-        <div class="err-text" >{{ errorText }}</div>
-        <button type="button" class="btn select-btn" @click="handleClick()">
-          <UploadIcon class="btn-icon" />{{ t('pdfToolDetail.upload.selectFile') }}
-        </button>
-        <div class="upload-text">{{ t('pdfToolDetail.upload.dragDrop') }}</div>
-      </template>
-
-      <template v-else-if="file.status === 'selectType'">
-        <div class="select-header">
-          <ConvertIcon class="select-header-icon" />{{ t('pdfToolDetail.upload.pdfConverter') }}
-        </div>
-        <div class="select-type">
-          <div class="type-item" :class="{ active: type === 'docx' }" @click="conversion('docx')">
-            <WordIcon /><span class="type-text">{{ t('pdfToolDetail.upload.fileTypes.word') }}</span>
-          </div>
-          <div class="type-item" :class="{ active: type === 'xlsx' }" @click="conversion('xlsx')">
-            <ExcelIcon /><span class="type-text">{{ t('pdfToolDetail.upload.fileTypes.excel') }}</span>
-          </div>
-          <div class="type-item" :class="{ active: type === 'pptx' }" @click="conversion('pptx')">
-            <PptIcon /><span class="type-text">{{ t('pdfToolDetail.upload.fileTypes.slide') }}</span>
-          </div>
-          <div class="type-item" :class="{ active: type === 'html' }" @click="conversion('html')">
-            <HtmlIcon /><span class="type-text">{{ t('pdfToolDetail.upload.fileTypes.html') }}</span>
-          </div>
-          <div class="type-item" :class="{ active: type === 'png' }" @click="conversion('png')">
-            <PngIcon /><span class="type-text">{{ t('pdfToolDetail.upload.fileTypes.png') }}</span>
-          </div>
-          <div class="type-item" :class="{ active: type === 'jpg' }" @click="conversion('jpg')">
-            <JpgIcon /><span class="type-text">{{ t('pdfToolDetail.upload.fileTypes.jpg') }}</span>
-          </div>
-          <div class="type-item" :class="{ active: type === 'txt' }" @click="conversion('txt')">
-            <TxtIcon /><span class="type-text">{{ t('pdfToolDetail.upload.fileTypes.txt') }}</span>
-          </div>
-          <div class="type-item" :class="{ active: type === 'csv' }" @click="conversion('csv')">
-            <CsvIcon /><span class="type-text">{{ t('pdfToolDetail.upload.fileTypes.csv') }}</span>
-          </div>
-          <div class="type-item" :class="{ active: type === 'rtf' }" @click="conversion('rtf')">
-            <RtfIcon /><span class="type-text">{{ t('pdfToolDetail.upload.fileTypes.rtf') }}</span>
-          </div>
-          <div class="type-item" :class="{ active: type === 'json' }" @click="conversion('json')">
-            <JsonIcon /><span class="type-text">{{ t('pdfToolDetail.upload.fileTypes.json') }}</span>
-          </div>
-        </div>
-        <button type="button" class="btn convert-btn" @click="handleConvert(false)">
-          {{ t('pdfToolDetail.upload.convertFile') }}
-        </button>
-      </template>
-
-      <div v-else-if="file.status === 'uploading' && file.percentage !== 100" class="btn upload-btn action-btn">
-        <div class="progress-bar" :style="{ maxWidth: (file.percentage || 0) + '%' }"></div>
-        <div class="uploading-text">
-          {{ t('pdfToolDetail.upload.uploadingProgress', { percent: file.percentage }) }}
-        </div>
-      </div>
-      <div v-else-if="file.status === 'uploading' && file.percentage === 100" class="btn converting-btn action-btn">
-        <LoadingIcon class="btn-icon spin" />{{ t('pdfToolDetail.upload.converting') }}
-      </div>
-    </div>
-
-    <!-- hidden file inputs -->
-    <input
-      ref="input"
-      class="upload-input"
-      type="file"
-      name="file"
-      :accept="accept"
-      :multiple="canSelectMultiple"
-      @change="handleChange"
-    />
-    <input
-      ref="watermarkImageInput"
-      class="upload-input"
-      type="file"
-      accept=".jpg,.jpeg,.png,.bmp"
-      @change="handleWatermarkImageChange"
-    />
-    <input
-      ref="insertTargetInput"
-      class="upload-input"
-      type="file"
-      accept=".pdf"
-      @change="handleInsertTargetChange"
-    />
-    <input
-      ref="iccProfileInput"
-      class="upload-input"
-      type="file"
-      accept=".icc,.icm"
-      @change="handleIccProfileChange"
-    />
-  </div>
+                    <aside v-if="hasSettings" class="settings card" :class="{ 'settings-locked': locked }">
+                      <h2>{{ t('batchTools.settings') }}</h2>
+                      <fieldset :disabled="locked" @input="settingsTouched = true" @change="settingsTouched = true">
+                        <StampSettings v-if="isStamp" v-model="stamp" :kind="stampKind" :disabled="locked" />
+                        <p v-else-if="isRemoval" class="removal-note">{{ t('batchTools.wholeDocumentRemoval') }}</p>
+                        <SplitSettings v-else-if="toType === 'split'" v-model:mode="splitMode" v-model:ranges="splitValue"
+                          v-model:count="splitCount" v-model:separator="splitSeparator"
+                          :filename="selected?.file.name" :disabled="locked" />
+                        <WatermarkSettings v-else-if="toType === 'addWatermark'" v-model:parameter="parameter"
+                          v-model:image-file="watermarkImageFile" :disabled="locked" @pick-image="imageInput?.click()"
+                          />
+                        <ParamForm v-else :from-type="fromType" :to-type="toType" :files="rows.map(row => row.file)"
+                          :converting="locked" batch v-model:parameter="parameter" v-model:password="password"
+                          v-model:is-csv-merge="isCsvMerge" v-model:watermark-image-file="watermarkImageFile"
+                          v-model:insert-target-file="insertTargetFile" v-model:icc-profile-file="iccProfileFile"
+                          @pick-watermark-image="imageInput?.click()" @pick-insert-target="insertInput?.click()"
+                          @pick-icc-profile="iccInput?.click()"
+                          @drop-icc-profile="(file) => { if (!locked) iccProfileFile = file; }" />
+                      </fieldset>
+                      <p v-if="validationKey && settingsTouched && !started && !isStamp"
+                        class="error">{{ t(validationKey) }}</p>
+                    </aside>
+                  </div>
+                  <div class="main-actions">
+                    <button type="button" class="primary start-button"
+                      :disabled="filesDisabled || (!started && !canStart)" @click="primaryAction">{{ actionLabel
+                      }}</button>
+                  </div>
+                </template>
+                <p v-if="globalError" role="alert" class="error panel-error">{{ globalError }}</p>
+                <button v-if="pollFailed" type="button" class="outline" :disabled="running" @click="resumePolling">{{
+                  t('batchTools.resumePolling') }}</button>
+    </section>
+  </TooltipProvider>
 </template>
 
 <style scoped>
-.converter-wrapper {
+.batch-panel {
   position: relative;
-  padding: 40px;
-  border: 1px solid #d1d5dc;
-  border-radius: 8px;
-  background: #fbfcff;
-  transition: box-shadow 0.2s;
-}
-.converter-wrapper.hover {
-  box-shadow: 0 0 0 2px #396ffa inset;
-}
-.converter-wrapper.params {
-  padding: 40px 32px 40px;
-  min-height: 380px;
-}
-.converter-wrapper.no-pad {
-  padding: 0;
-  border: 0;
-  background: transparent;
+  width: 100%;
+  color: #0c131f;
+  font-size: 14px;
 }
 
-/* ---- await state ---- */
-.await-header {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 20px;
-  font-size: 24px;
-  font-weight: 600;
-  color: #232748;
+.hidden-input {
+  display: none;
 }
-.await-header-icon {
-  width: 32px;
-  height: 32px;
-  margin-right: 16px;
+
+button,
+input,
+select {
+  font: inherit;
 }
-.name {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-  min-height: 56px;
-  margin: 20px 0 40px;
-  padding: 8px 12px;
-  background: #fff;
-  border-radius: 4px;
+
+button {
+  cursor: pointer;
 }
-.name-list {
-  flex: 1;
-  min-width: 0;
+
+button:disabled {
+  opacity: .45;
+  cursor: not-allowed;
 }
-.name-item {
-  display: flex;
-  align-items: center;
-  min-height: 40px;
-  margin-bottom: 12px;
-  font-size: 16px;
-  font-weight: 500;
-  color: #0a0d1c;
-  line-height: 24px;
-  word-break: break-all;
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 2px solid #396ffa;
+  outline-offset: 2px;
 }
-.name-item:last-child {
-  margin-bottom: 0;
-}
-.name-item-icon {
-  flex: none;
-  width: 40px;
-  height: 40px;
-  margin-right: 12px;
-}
-.name-delete {
+
+.primary,
+.outline {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: none;
-  width: 32px;
-  height: 32px;
-  margin-left: 12px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #52555f;
-  cursor: pointer;
-}
-.name-delete :deep(svg) {
-  width: 20px;
-  height: 20px;
-}
-.name-delete:hover {
-  color: #f56565;
-}
-.name-delete:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-.await-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 0;
-}
-.converter-wrapper.params .await-actions {
-  margin-right: 0px;
-}
-.converter-wrapper.params .split-await-actions {
-  position: static;
-  margin-bottom: 32px;
-}
-.select-more {
-  min-width: 139px;
-  padding: 0 16px;
-  height: 40px;
+  gap: 12px;
   border: 1px solid #396ffa;
-  border-radius: 8px;
-  background: #fff;
-  color: #396ffa;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.select-more:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-.frame {
-  height: 1px;
-  margin: 0 0 40px;
-  background: repeating-linear-gradient(90deg, #d1d5dc 0 4px, transparent 4px 12px);
-}
-.err-text {
-  min-height: 20px;
-  margin: 8px 0;
-  color: #f56565;
-  font-size: 13px;
-  text-align: center;
-  word-break: break-word;
-}
-.err-text :deep(a) {
-  color: #396ffa;
-  text-decoration: underline;
-}
-.settings-row {
-  position: relative;
-  text-align: left;
-}
-.split-settings-row {
-  padding-top: 44px;
-}
-.settings-toggle {
-  position: absolute;
-  right: 0px;
-  top: 12px;
-  z-index: 2;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #d1d5dc;
-  background: #396ffa;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.split-settings-row .settings-toggle {
-  top: 0;
-}
-.settings-toggle :deep(svg) {
-  color: #e5ecff;
-}
-.settings-body {
-  margin: 0 auto;
-  text-align: left;
+  border-radius: 6px;
+  padding: 8px 24px;
+  min-height: 40px;
+  font-size: 16px;
+  line-height: 24px;
 }
 
-/* ---- drag / select zone ---- */
-.upload-dragger {
+.primary {
+  background: #396ffa;
+  color: #fff;
+}
+
+.outline {
+  background: #fff;
+  color: #396ffa;
+}
+
+.primary svg,
+.outline svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.empty-upload {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex: 1;
-  min-height: 380px;
-  padding: 56px 40px;
-  border: 2px dashed #c7cad1;
-  border-radius: 12px;
-  background: #fbfcff;
-  transition: border-color 0.2s, background 0.2s;
+  min-height: min(800px, calc(100vh - 240px));
+  padding: 48px 16px;
+  background: #fff;
+  border: 1px dashed #dcdde1;
+  text-align: center;
 }
-.upload-dragger.is-dragover {
-  border-color: #396ffa;
-  background: #eef3ff;
+
+.empty-upload.drag-active {
+  background: #f5f7ff;
+  border-color: #618cfb;
 }
-.upload-dragger.processing {
-  border: 2px solid transparent;
-  background: transparent;
-  transition: none;
+
+.upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
 }
-.upload-dragger.hidden {
-  display: none;
+
+.empty-upload p {
+  margin: 8px 0 0;
+  color: #6d727a;
+  line-height: 22px;
 }
-.upload-text {
-  margin-top: 16px;
-  color: #6b6375;
-  font-size: 14px;
-}
-.note {
-  margin-top: 12px;
-  color: #b1bfd1;
+
+.empty-upload .formats {
+  color: #9da0a6;
   font-size: 12px;
 }
 
-/* ---- selectType grid ---- */
-.select-header {
-  display: flex;
-  align-items: center;
-  font-size: 24px;
-  font-weight: 600;
-  color: #232748;
-  margin-bottom: 32px;
-}
-.select-header-icon {
-  width: 32px;
-  height: 32px;
-  margin-right: 16px;
-}
-.select-type {
+.drop-overlay {
+  position: absolute;
+  inset: 0;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 16px;
-  margin-bottom: 32px;
-}
-.type-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 16px 8px;
-  border: 1px solid #e5ecff;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-.type-item:hover {
-  border-color: #396ffa;
-}
-.type-item.active {
-  border-color: #396ffa;
-  background: #eef3ff;
-}
-.type-item :deep(svg) {
-  width: 36px;
-  height: 36px;
-}
-.type-text {
-  font-size: 13px;
-  color: #52555f;
+  place-items: center;
+  z-index: 20;
+  background: #f5f7ffed;
+  border: 2px dashed #618cfb;
+  pointer-events: none;
 }
 
-/* ---- buttons ---- */
-.btn {
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.76fr) minmax(320px, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.workspace-grid.without-settings {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.file-range-table th:nth-child(2) {
+  width: 29%;
+}
+
+.initial-file-ranges .documents {
+  min-height: min(730px, max(400px, calc(100vh - 300px)));
+}
+
+.file-range-table th:nth-child(3) {
+  width: 5%;
+}
+
+.file-range-table th:nth-child(4),
+.file-range-table .page-range-cell {
+  width: 28%;
+}
+
+.file-range-table.result-table th:nth-child(2) {
+  width: 25%;
+}
+
+.file-range-table.result-table th:nth-child(4),
+.file-range-table.result-table .page-range-cell {
+  width: 24%;
+}
+
+.file-page-range {
+  width: 100%;
+  height: 26px;
+  min-width: 0;
+  border: 1px solid #dcdde1;
+  border-radius: 3px;
+  background: #fff;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.file-page-range[aria-invalid="true"] {
+  border-color: #d44040;
+}
+
+.documents-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #dcdde1;
+  border-radius: 6px;
+  background: #fff;
+}
+
+h2 {
+  margin: 0 0 24px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.document-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.documents h2 {
+  margin: 0;
+}
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.small-button.result-download {
+  border-color: #396ffa;
+  background: #396ffa;
+  color: #fff;
+}
+
+.result-download :deep(path) {
+  fill: currentColor;
+}
+
+.result-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid #dce5ff;
+  border-top: 3px solid #396ffa;
+  border-radius: 4px;
+  padding: 16px 20px;
+}
+
+.summary-card span {
+  color: #777d88;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.summary-card strong {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+  color: #396ffa;
+}
+
+.summary-card.successful {
+  border-color: #c9efdc;
+  border-top-color: #67d1a0;
+}
+
+.summary-card.successful strong {
+  color: #67d1a0;
+}
+
+.summary-card.failure {
+  border-color: #f6cdcd;
+  border-top-color: #d44040;
+}
+
+.summary-card.failure strong {
+  color: #d44040;
+}
+
+.trial-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: 1px solid #fbd7aa;
+  border-radius: 4px;
+  background: #fef3e6;
+  color: #f28909;
+  margin-bottom: 24px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.trial-banner>svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.trial-banner p {
+  margin: 0;
+  flex: 1;
+  margin-right: 8px;
+}
+
+.trial-banner a {
+  flex: none;
+  padding: 4px 8px;
+  border-radius: 3px;
+  background: #f5a13a;
+  color: #fff;
+  text-decoration: none;
+}
+
+.add-menu.disabled summary {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.result-table th:nth-child(2) {
+  width: 33%;
+}
+
+.result-table th:nth-child(3) {
+  width: 8%;
+}
+
+.result-table .status-cell {
+  width: 72px;
+  text-align: center;
+}
+
+.result-table .actions-cell {
+  width: 96px;
+  text-align: center;
+}
+
+.result-table .row-actions {
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+.is-processing .primary.start-button:disabled {
+  opacity: 1;
+  background: #b0c5fd;
+  border-color: #b0c5fd;
+}
+
+.settings-locked {
+  opacity: .5;
+}
+
+.settings-locked :deep(:disabled) {
+  opacity: 1;
+}
+
+.is-completed .workspace-grid {
+  align-items: stretch;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  padding: 2px;
+  background: none;
+}
+
+.status-badge svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.list-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.filters {
+  display: flex;
+  background: #f5f7ff;
+  border-radius: 3px;
+}
+
+.filters button {
+  border: 1px solid transparent;
+  padding: 5px 12px;
+  background: transparent;
+  font-size: 12px;
+  color: #6d727a;
+}
+
+.filters button.active {
+  border-color: #e5ebfc;
+  color: #0c131f;
+  background: #fff;
+}
+
+.filters span {
+  color: #8d9198;
+}
+
+.small-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 5px 12px;
+  background: #fff;
+  border: 1px solid #dcdde1;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.small-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.add-menu {
+  position: relative;
+  font-size: 12px;
+  color: #396ffa;
+}
+
+.add-menu summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  cursor: pointer;
+  border: 1px solid #396ffa;
+  border-radius: 3px;
+  padding: 5px 10px;
+  list-style: none;
+}
+
+.add-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.add-menu summary svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.add-menu summary svg:last-child {
+  width: 16px;
+  height: 16px;
+}
+
+.add-menu>div {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  min-width: 160px;
+  z-index: 10;
+  background: #fff;
+  box-shadow: 0 4px 16px #0002;
+}
+
+.add-menu button {
+  display: block;
+  border: 0;
+  background: #fff;
+  padding: 10px;
+  width: 100%;
+  text-align: left;
+}
+
+.add-menu button:hover {
+  background: #f5f7ff;
+}
+
+.table-scroll {
+  overflow: auto;
+  border: 1px solid #dcdde1;
+  border-radius: 4px;
+  max-height: 560px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  min-width: 530px;
+  font-size: 12px;
+}
+
+th {
+  background: #f5f7ff;
+  font-weight: 400;
+  color: #9599a1;
+  text-align: left;
+  padding: 12px 8px;
+}
+
+td {
+  height: 46px;
+  border-top: 1px solid #e7e8e8;
+  padding: 7px 8px;
+  vertical-align: middle;
+}
+
+th:nth-child(2) {
+  width: 40%;
+}
+
+th:nth-child(3) {
+  width: 8%;
+}
+
+th:last-child {
+  width: 75px;
+}
+
+.order-col {
+  width: 24px;
+  padding: 0;
+}
+
+.drag-handle {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 24px auto 0;
-  padding: 0 24px;
-  height: 48px;
-  border: none;
-  border-radius: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
+  width: 24px;
+  height: 28px;
+  padding: 4px;
+  border: 0;
+  background: transparent;
+  cursor: grab;
 }
-.btn-icon {
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle svg {
+  width: 16px;
+  height: 16px;
+}
+
+.file-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  max-width: 100%;
+}
+
+.file-name svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.file-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name-cell small {
+  display: block;
+  overflow-wrap: anywhere;
+  padding-top: 4px;
+  line-height: 16px;
+}
+
+.size-cell {
+  white-space: nowrap;
+}
+
+.password-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  border: 1px solid #dcdde1;
+  border-radius: 3px;
+  padding: 2px 8px;
+  background: #fff;
+}
+
+.password-field>svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.password-field input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  height: 20px;
+  border: 0;
+  background: transparent;
+  font-size: 12px;
+  outline: none;
+}
+
+.password-field:focus-within {
+  border-color: #396ffa;
+}
+
+.password-field button {
+  display: flex;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.password-field button svg {
+  width: 14px;
+  height: 14px;
+}
+
+input::placeholder {
+  color: #a1a5ad;
+}
+
+tr.failed {
+  background: #fbeded;
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.row-actions button {
+  background: none;
+  border: 0;
+  padding: 2px;
+  color: #396ffa;
+  font-size: 18px;
+}
+
+.row-actions svg {
+  width: 16px;
+  height: 16px;
+}
+
+.row-actions :deep(path) {
+  fill: #396ffa;
+}
+
+.status-badge.success {
+  color: #36aa7b;
+}
+
+.status-badge.failed {
+  color: #d44040;
+}
+
+.list-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.text-button {
+  border: 0;
+  background: none;
+  color: #396ffa;
+  font-size: 12px;
+}
+
+.progress-panel {
+  position: relative;
+  background: #f5f7ff;
+  padding: 16px 24px 16px 56px;
+  margin-bottom: 24px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.progress-panel>div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.progress-panel progress {
+  height: 6px;
+  flex: 1;
+  border: 0;
+  border-radius: 99px;
+  overflow: hidden;
+  accent-color: #396ffa;
+}
+
+.progress-panel progress::-webkit-progress-bar {
+  background: #e7e8e8;
+}
+
+.progress-panel progress::-webkit-progress-value {
+  background: #396ffa;
+}
+
+.processing-spinner {
+  position: absolute;
+  left: 24px;
+  top: 20px;
   width: 20px;
   height: 20px;
-  margin-right: 8px;
+  animation: batch-spin 1s linear infinite;
 }
-.select-btn {
-  background: #396ffa;
-  color: #fff;
-}
-.upload-dragger > .select-btn {
-  width: 300px;
-  height: 48px;
-  margin-top: 0;
-  border-radius: 8px;
-  font-size: 16px;
-  line-height: 24px;
-}
-.converter-wrapper.params > .select-btn,
-.converter-wrapper.params > .upload-btn,
-.converter-wrapper.params > .converting-btn {
-  width: fit-content;
-  min-width: min(100%, 128px);
-  max-width: 100%;
-  height: 40px;
-  min-height: 40px;
-  margin-top: 40px;
-  padding: 0 24px;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 24px;
-  white-space: nowrap;
-}
-.select-btn:hover {
-  background: #2b59e0;
-}
-.convert-btn {
-  background: #0a0d1c;
-  color: #fff;
-}
-.convert-btn:hover {
-  opacity: 0.9;
-}
-.upload-btn {
-  position: relative;
-  background: #396ffa;
-  color: #fff;
-  overflow: hidden;
-  cursor: default;
-}
-.progress-bar {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 100%;
-  background: #1f49c1;
-  transition: max-width 0.6s ease;
-}
-.uploading-text {
-  position: relative;
-  z-index: 1;
-  color: #fff;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.converting-btn {
-  background: #396ffa;
-  color: #fff;
-  cursor: default;
-}
-.download-btn {
-  background: #396ffa;
-  color: #fff;
-}
-.success-card .download-btn {
-  width: 264px;
-  height: 40px;
-  margin: 0;
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 24px;
-}
-.download-btn:hover {
-  background: #2b59e0;
-}
-.spin {
-  animation: up-spin 1s linear infinite;
-}
-@keyframes up-spin {
+
+@keyframes batch-spin {
   to {
     transform: rotate(360deg);
   }
 }
 
-/* ---- success card ---- */
-.success-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  justify-content: center;
-  width: 100%;
-  min-height: 342px;
-  margin-top: 48px;
-  padding: 32px 42px 24px;
-  background: #fff;
-  border: 1px solid #d1d5dc;
-  border-radius: 12px;
-  text-align: center;
+@media (prefers-reduced-motion: reduce) {
+  .processing-spinner {
+    animation: none;
+  }
 }
-.success-main {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 32px;
+
+.progress-panel p {
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
 }
-.success-copy {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-.success-hero {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 180px;
-  height: 147px;
-}
-.success-hero::before,
-.success-hero::after {
-  content: '';
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  background: #8df0ce;
-  transform: rotate(45deg);
-}
-.success-hero::before {
-  left: 42px;
-  top: 58px;
-}
-.success-hero::after {
-  right: 49px;
-  top: 29px;
-}
-.success-icon {
-  width: 88px;
-  height: 88px;
-  padding: 8px;
-  border-radius: 999px;
-  background: #a7ebdc;
-  color: #31bc98;
-}
-.success-title {
+
+.settings fieldset {
+  padding: 0;
+  border: 0;
   margin: 0;
-  color: #0a0d1c;
-  font-size: 30px;
-  font-weight: 600;
-  line-height: 40px;
+  min-width: 0;
 }
-.success-file-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+
+.settings h2 {
+  margin-bottom: 20px;
+}
+
+.removal-note {
+  line-height: 22px;
+}
+
+.settings :deep(.setting-row) {
+  display: block;
+  margin-bottom: 16px;
+  min-height: 0;
+}
+
+.settings :deep(.setting-label) {
+  flex-basis: auto;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.settings :deep(.setting-row-switch) {
+  column-gap: 12px;
+  justify-content: space-between;
+  min-height: 32px;
+  margin-bottom: 16px;
+}
+
+.settings :deep(.setting-row-switch:last-child) {
+  margin-bottom: 0;
+}
+
+.settings :deep(.ocr-section>.setting-row-switch) {
+  margin-bottom: 8px;
+}
+
+.settings :deep(.ocr-options .setting-row) {
+  margin-bottom: 0;
+}
+
+.settings :deep(.setting-row-switch .setting-label) {
+  flex: 1;
+  margin: 0;
+}
+
+.settings :deep(.setting-control) {
+  width: 100%;
+}
+
+.settings :deep(.text-input),
+.settings :deep(.num-input),
+.settings :deep(.select-input) {
+  width: 100%;
+  height: 32px;
+  border-radius: 3px;
+  font-size: 14px;
+  padding: 4px 8px;
+}
+
+.settings :deep(.setting-control .inline-group) {
+  flex-wrap: wrap;
+}
+
+.settings :deep(.num-input) {
+  min-width: 0;
+}
+
+.settings :deep(.radio-group) {
+  flex-wrap: wrap;
   gap: 8px;
 }
-.success-file {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0;
-  color: #0a0d1c;
-  font-size: 14px;
-  line-height: 20px;
-  word-break: break-all;
-}
-.success-file-icon {
-  width: 20px;
-  height: 20px;
-  margin-right: 8px;
-  flex: none;
-}
-.success-actions {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  width: 264px;
-  max-width: 100%;
-}
-.reset {
-  display: flex;
-  align-items: center;
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: #0a0d1c;
-  font-size: 16px;
-  line-height: 24px;
-  cursor: pointer;
-}
-.reset:hover {
-  color: #396ffa;
-}
-.reset-icon {
-  width: 14px;
-  height: 14px;
-  margin-right: 8px;
-}
-.trial-limit-banner {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+
+.settings :deep(.icc-profile-control) {
   width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #fcd980;
-  border-radius: 8px;
-  background: rgba(252, 217, 128, 0.2);
 }
-.trial-limit-icon {
-  display: inline-flex;
-  align-items: center;
+
+.settings :deep(.icc-dropzone) {
+  width: 100%;
+  height: 160px;
+}
+
+.main-actions {
+  display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
-  border-radius: 999px;
-  background: #fcd980;
-  color: #fc7125;
-  font-size: 14px;
-  font-weight: 700;
+  gap: 12px;
+  margin-top: 24px;
 }
-.trial-limit-banner p {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  color: #0a0d1c;
-  font-size: 14px;
+
+.start-button {
+  min-width: min(300px, 100%);
+}
+
+.error {
+  color: #d44040;
+  font-size: 12px;
   line-height: 20px;
-  text-align: left;
-}
-.trial-limit-banner a {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  height: 32px;
-  padding: 0 12px;
-  border: 1px solid #d1d5dc;
-  border-radius: 4px;
-  background: #fff;
-  color: #396ffa;
-  font-size: 14px;
-  line-height: 20px;
-  text-decoration: none;
 }
 
-.upload-input {
-  display: none;
+.panel-error {
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
-@media (max-width: 768px) {
-  .markdown-settings-row {
-    padding-top: 36px;
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+@media (max-width: 1050px) {
+  .workspace-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .markdown-settings-row .settings-toggle {
-    top: 0;
+  .settings {
+    width: 100%;
   }
 
-  .converter-wrapper {
-    padding: 24px 16px;
+  .empty-upload {
+    min-height: 450px;
   }
-  .select-type {
-    grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 575px) {
+  .card {
+    padding: 12px;
   }
-  .await-header {
-    font-size: 20px;
+
+  .empty-upload {
+    min-height: 380px;
   }
-  .success-card {
-    padding: 28px 16px 20px;
+
+  .upload-actions,
+  .upload-actions button {
+    width: 100%;
   }
-  .success-title {
-    font-size: 24px;
-    line-height: 32px;
-    white-space: normal;
+
+  .primary,
+  .outline {
+    padding: 8px 16px;
   }
-  .trial-limit-banner {
-    align-items: flex-start;
+
+  .list-toolbar {
+    gap: 8px;
+  }
+
+  .filters button {
+    padding: 5px 8px;
+  }
+
+  .main-actions button {
+    flex: 1;
+  }
+
+  .list-actions {
     flex-wrap: wrap;
   }
-  .trial-limit-banner a {
-    margin-left: 32px;
+
+  .batch-panel {
+    font-size: 13px;
   }
 }
 </style>

@@ -3,9 +3,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { toolI18nKey } from '@/config/i18n-keys';
 import { resolveTool } from '@/config/convert-map';
-import StepCheck from '@/assets/icons/ui/step_check.svg?component';
-import StepArrow from '@/assets/icons/ui/step_arrow.svg?component';
-import StepLine from '@/assets/icons/ui/step_line.svg?component';
+import { toolIcon } from '@/utils/tool-icons';
 
 const props = withDefaults(
   defineProps<{
@@ -23,8 +21,7 @@ const { t } = useI18n();
 const icon = computed(() => {
   const tool = resolveTool(props.toolSlug);
   if (!tool) return null;
-  const mods = import.meta.glob('@/assets/icons/*.svg', { eager: true, query: '?component', import: 'default' });
-  return (mods as Record<string, any>)[`/src/assets/icons/${tool.icon}.svg`] ?? null;
+  return toolIcon(tool.icon) ?? null;
 });
 </script>
 
@@ -34,66 +31,6 @@ const icon = computed(() => {
       <component :is="icon" v-if="icon" class="step-title-icon" />
       <span>{{ t(toolI18nKey(toolSlug)) }}</span>
     </h1>
-
-    <div
-      v-if="fileStatus !== 'success' && (fromType === '' || fromType === 'pdf' || fromType === 'img')"
-      class="step-title-steps"
-      :class="{
-        'step-title-steps--await': fileStatus === 'await',
-        'step-title-steps--success': fileStatus === 'success',
-      }"
-    >
-      <!-- 01 Upload — always checked -->
-      <div class="step-title-step">
-        <p class="step-title-label step-title-label--active">
-          <span class="step-title-num">01</span>{{ t('pdfToolDetail.steps.upload') }}
-        </p>
-        <div class="step-title-bar">
-          <StepCheck class="step-title-check" />
-          <StepArrow />
-        </div>
-      </div>
-
-      <!-- 02 Customize — checked at await / success -->
-      <div class="step-title-step">
-        <p
-          class="step-title-label"
-          :class="{ 'step-title-label--active': fileStatus === 'await' || fileStatus === 'success' }"
-        >
-          <span class="step-title-num">02</span>{{ t('pdfToolDetail.steps.customize') }}
-        </p>
-        <div class="step-title-bar">
-          <template v-if="fileStatus === 'await' || fileStatus === 'success'">
-            <StepCheck class="step-title-check" />
-            <StepArrow />
-          </template>
-          <template v-else>
-            <span class="step-title-placeholder"></span>
-            <span class="step-title-dashed"></span>
-          </template>
-        </div>
-      </div>
-
-      <!-- 03 Convert — checked at success -->
-      <div class="step-title-step">
-        <p
-          class="step-title-label"
-          :class="{ 'step-title-label--active': fileStatus === 'success' }"
-        >
-          <span class="step-title-num">03</span>{{ t('pdfToolDetail.steps.convert') }}
-        </p>
-        <div class="step-title-bar">
-          <template v-if="fileStatus === 'success'">
-            <StepCheck class="step-title-check" />
-            <StepLine />
-          </template>
-          <template v-else>
-            <span class="step-title-placeholder"></span>
-            <span class="step-title-dashed"></span>
-          </template>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 

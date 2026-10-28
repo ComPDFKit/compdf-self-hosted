@@ -1,0 +1,27 @@
+[Unit]
+Description=ComPDF Self-Hosted Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=compdf
+Group=compdf
+WorkingDirectory=/opt/compdf/current/server
+EnvironmentFile=/etc/compdf/compdf-server.env
+ExecStartPre=/usr/bin/node dist/src/scripts/init-db.js
+ExecStart=/usr/bin/node dist/src/main.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=45s
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/etc/compdf /var/lib/compdf
+UMask=0027
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

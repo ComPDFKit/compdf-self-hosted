@@ -26,11 +26,15 @@ import { BrandingController } from './branding.controller';
 import { SettingsFileSyncService } from './settings-file-sync.service';
 import { SystemLogService } from './system-log.service';
 import { UpdateCheckService } from './update-check.service';
+import { RuntimeModule } from '../runtime/runtime.module';
+import { UpdaterClientService } from './updater-client.service';
+import { LicenseUpdateService } from './license-update.service';
+import { LicenseUpdateController } from './license-update.controller';
 
 @Module({
-  imports: [ClientsModule, AuthModule],
-  controllers: [DashboardController, BrandingController],
-  providers: [DashboardService, BrandSettingsService, SettingsFileSyncService, SystemLogService, UpdateCheckService],
+  imports: [ClientsModule, AuthModule, RuntimeModule],
+  controllers: [DashboardController, BrandingController, LicenseUpdateController],
+  providers: [DashboardService, BrandSettingsService, SettingsFileSyncService, SystemLogService, UpdateCheckService, UpdaterClientService, LicenseUpdateService],
   exports: [BrandSettingsService],
 })
 export class DashboardModule {}

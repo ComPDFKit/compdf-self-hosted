@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.compdf.com/schemas/self-hosted/deployment-config-v1.json",
+  "title": "ComPDF Self-Hosted deployment configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "entrypoint",
+    "database",
+    "redis",
+    "storage",
+    "license",
+    "tls",
+    "cors",
+    "retention",
+    "updates"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "entrypoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["publicBaseUrl", "listenPort", "trustedProxies"],
+      "properties": {
+        "publicBaseUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "listenPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "trustedProxies": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        }
+      }
+    },
+    "database": { "$ref": "#/$defs/database" },
+    "redis": { "$ref": "#/$defs/redis" },
+    "storage": { "$ref": "#/$defs/storage" },
+    "license": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tokenSecret"],
+      "properties": { "tokenSecret": { "$ref": "#/$defs/secretRef" } }
+    },
+    "tls": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["termination", "minimumVersion"],
+      "properties": {
+        "termination": { "enum": ["proxy", "server"] },
+        "minimumVersion": { "enum": ["TLSv1.2", "TLSv1.3"] },
+        "certificateSecret": { "$ref": "#/$defs/secretRef" },
+        "privateKeySecret": { "$ref": "#/$defs/secretRef" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "termination": { "const": "server" } }, "required": ["termination"] },
+          "then": {
+            "properties": {
+              "certificateSecret": { "$ref": "#/$defs/secretRef" },
+              "privateKeySecret": { "$ref": "#/$defs/secretRef" }
+            },
+            "required": ["certificateSecret", "privateKeySecret"]
+          },
+          "else": {
+            "properties": {
+              "certificateSecret": false,
+              "privateKeySecret": false
+            }
+          }
+        }
+      ]
+    },
+    "cors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["origins"],
+      "properties": {
+        "origins": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https://",
+            "not": { "const": "*" }
+          }
+        }
+      }
+    },
+    "retention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["taskResultDays", "operationLogDays", "backupCount"],
+      "properties": {
+        "taskResultDays": { "type": "integer", "minimum": 1, "maximum": 3650 },
+        "operationLogDays": { "type": "integer", "minimum": 1, "maximum": 3650 },
+        "backupCount": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
+    "updates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "channel", "manifestUrl", "autoDownload", "automaticInstall"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "channel": { "enum": ["stable", "beta", "security"] },
+        "manifestUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "autoDownload": { "type": "boolean" },
+        "automaticInstall": { "type": "boolean" },
+        "maintenanceWindow": { "$ref": "#/$defs/maintenanceWindow" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "automaticInstall": { "const": true } }, "required": ["automaticInstall"] },
+          "then": {
+            "properties": {
+              "maintenanceWindow": { "$ref": "#/$defs/maintenanceWindow" }
+            },
+            "required": ["maintenanceWindow"]
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "secretRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file"],
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 1024,
+          "pattern": "^(?:/|[A-Za-z]:\\\\)"
+        }
+      }
+    },
+    "tlsClient": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["disabled", "verify-ca", "verify-full"] },
+        "caSecret": { "$ref": "#/$defs/secretRef" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "enum": ["verify-ca", "verify-full"] } }, "required": ["mode"] },
+          "then": {
+            "properties": { "caSecret": { "$ref": "#/$defs/secretRef" } },
+            "required": ["caSecret"]
+          },
+          "else": { "properties": { "caSecret": false } }
+        }
+      ]
+    },
+    "maintenanceWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timezone", "days", "start", "durationMinutes"],
+      "properties": {
+        "timezone": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "days": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] }
+        },
+        "start": { "type": "string", "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$" },
+        "durationMinutes": { "type": "integer", "minimum": 15, "maximum": 1440 }
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "port", "name", "user", "passwordSecret", "tls", "connectTimeoutMs", "poolSize"],
+      "properties": {
+        "host": { "type": "string", "minLength": 1, "maxLength": 253 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "name": { "type": "string", "pattern": "^[A-Za-z0-9_]{1,64}$" },
+        "user": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "passwordSecret": { "$ref": "#/$defs/secretRef" },
+        "tls": { "$ref": "#/$defs/tlsClient" },
+        "connectTimeoutMs": { "type": "integer", "minimum": 1000, "maximum": 120000 },
+        "poolSize": { "type": "integer", "minimum": 1, "maximum": 256 }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "port", "database", "tls", "connectTimeoutMs"],
+      "properties": {
+        "host": { "type": "string", "minLength": 1, "maxLength": 253 },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "database": { "type": "integer", "minimum": 0, "maximum": 15 },
+        "passwordSecret": { "$ref": "#/$defs/secretRef" },
+        "tls": { "$ref": "#/$defs/tlsClient" },
+        "connectTimeoutMs": { "type": "integer", "minimum": 1000, "maximum": 120000 }
+      }
+    },
+    "storage": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "dataRoot"],
+          "properties": {
+            "type": { "const": "bundled" },
+            "dataRoot": { "type": "string", "pattern": "^(?:/|[A-Za-z]:\\\\)", "minLength": 2 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "endpoint", "bucket", "region", "accessKeySecret", "secretKeySecret", "tls"],
+          "properties": {
+            "type": { "const": "s3" },
+            "endpoint": { "type": "string", "format": "uri", "pattern": "^https://" },
+            "bucket": { "type": "string", "minLength": 3, "maxLength": 63 },
+            "region": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "accessKeySecret": { "$ref": "#/$defs/secretRef" },
+            "secretKeySecret": { "$ref": "#/$defs/secretRef" },
+            "tls": { "$ref": "#/$defs/tlsClient" }
+          }
+        }
+      ]
+    }
+  }
+}

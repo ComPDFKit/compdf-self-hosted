@@ -119,7 +119,7 @@ function shouldRecordError(url: unknown): boolean {
 
 function isToolRoute(url: unknown): boolean {
   if (typeof url !== 'string') return false;
-  return url.startsWith('/api/v1/process/') || url.startsWith('/api/v1/task');
+  return url.startsWith('/api/v1/process/') || url.startsWith('/api/v1/task') || url.startsWith('/api/v1/batches');
 }
 
 function isLoginRoute(url: unknown): boolean {

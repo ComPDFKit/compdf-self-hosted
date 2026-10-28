@@ -1,0 +1,154 @@
+name: Deployment contracts
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: false
+  pull_request:
+  push:
+    branches-ignore:
+      - updates
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deployment-contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server-and-compose:
+    name: Server and Compose contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+        ports:
+          - 3306/tcp
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install Server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Reject critical production dependency vulnerabilities
+        working-directory: server
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: Test Server and deployment contracts
+        working-directory: server
+        env:
+          BATCH_MYSQL_TEST_PORT: ${{ job.services.mysql.ports['3306'] }}
+        run: npm test
+
+      - name: Test supported installers and release preparation
+        run: |
+          jq --version
+          bash -n deploy/install.sh
+          bash -n deploy/apple-container/compdf-container.sh
+          node --test deploy/install.test.cjs deploy/apple-container/compdf-container.test.cjs
+          python3 -m unittest discover -s scripts -p '*_test.py'
+          python3 -m unittest discover -s updater/packaging -p '*_test.py'
+
+      - name: Build Server
+        working-directory: server
+        run: npm run build
+
+      - name: Validate Compose variants
+        run: node scripts/validate-compose.mjs
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4.3.1
+        with:
+          version: v4.2.4
+
+      - name: Validate Helm chart variants
+        run: |
+          helm lint helm/compdf-self-hosted --strict
+          helm template compdf helm/compdf-self-hosted >/dev/null
+          helm template compdf helm/compdf-self-hosted -f helm/compdf-self-hosted/values-external.yaml >/dev/null
+          helm template compdf helm/compdf-self-hosted --set migration.enabled=true >/dev/null
+
+  frontend:
+    name: Frontend tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/compdf-web/package-lock.json
+
+      - name: Install Frontend dependencies
+        working-directory: frontend/compdf-web
+        run: npm ci
+
+      - name: Test Frontend
+        working-directory: frontend/compdf-web
+        run: npm test
+
+      - name: Build Frontend
+        working-directory: frontend/compdf-web
+        run: npm run build
+
+  updater:
+    name: Updater tests and vet
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.25.x"
+          cache: true
+          cache-dependency-path: updater/go.mod
+
+      - name: Test Updater
+        working-directory: updater
+        run: go test ./...
+
+      - name: Vet Updater
+        working-directory: updater
+        run: go vet ./...
+
+      - name: Build Linux updater artifacts
+        working-directory: updater
+        run: |
+          mkdir -p dist/linux-amd64 dist/linux-arm64
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o dist/linux-amd64/compdfctl ./cmd/compdfctl
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o dist/linux-amd64/compdf-updater ./cmd/compdf-updater
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -o dist/linux-arm64/compdfctl ./cmd/compdfctl
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -o dist/linux-arm64/compdf-updater ./cmd/compdf-updater

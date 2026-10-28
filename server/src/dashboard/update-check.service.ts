@@ -1,21 +1,12 @@
 /**
- * UpdateCheckService — checks a remote manifest for new self-hosted releases
- * (PRD §6.2.7 版本信息: 最新版本检测). Notification-only: the operator pulls a
- * new Docker image manually; this service never auto-updates anything.
- *
- * Flow:
- *   1. Read `updates.check_url` + `updates.enabled` from SettingsFileSyncService
- *      (sourced from settings.yml at startup).
- *   2. If disabled / no URL → return { latest: null, updateAvailable: false }.
- *   3. Fetch the manifest JSON (10s timeout). Cache in Redis 6h under
- *      `update:manifest` to avoid hammering the endpoint on every dashboard load.
- *   4. semver-compare `current` (package.json) vs `latest` (manifest).
- *
- * Resilience: a fetch/parse failure is logged + swallowed — getVersion() returns
- * latest=null so the dashboard shows "unable to check" rather than crashing.
+ * Lightweight Dashboard notifications from the same GitHub channel manifest
+ * used by the updater. The updater independently verifies the detached signature
+ * before accepting any download or installation. Unknown/failed checks remain
+ * unknown; only a successfully fetched active release confirms the latest version.
  */
 import { Injectable, Logger } from '@nestjs/common';
 import axios, { AxiosInstance } from 'axios';
+import { createHash } from 'crypto';
 import { RedisClient } from '../clients/redis.client';
 import { SettingsFileSyncService } from './settings-file-sync.service';
 
@@ -25,6 +16,10 @@ export interface UpdateManifest {
   changelogUrl?: string;
   image?: string;
   minUpgradeFrom?: string;
+  releaseNotes?: string;
+  status?: string;
+  expiresAt?: string;
+  images?: { server?: { name: string; tag: string; digest: string } };
 }
 
 export interface VersionStatus {
@@ -34,10 +29,10 @@ export interface VersionStatus {
   releasedAt: string | null;
   changelogUrl: string | null;
   image: string | null;
+  releaseNotes: string | null;
 }
 
-const CACHE_KEY = 'update:manifest';
-const CACHE_TTL_SECONDS = 6 * 60 * 60; // 6h
+const CACHE_TTL_SECONDS = 5 * 60;
 
 @Injectable()
 export class UpdateCheckService {
@@ -69,17 +64,22 @@ export class UpdateCheckService {
       updateAvailable,
       releasedAt: manifest.releasedAt ?? null,
       changelogUrl: manifest.changelogUrl ?? null,
-      image: manifest.image ?? null,
+      image: manifest.image ?? (manifest.images?.server
+        ? `${manifest.images.server.name}:${manifest.images.server.tag}@${manifest.images.server.digest}`
+        : null),
+      releaseNotes: manifest.releaseNotes ?? null,
     };
   }
 
   private async fetchManifest(url: string): Promise<UpdateManifest | null> {
+    // A source change must not reuse another feed's cached test or release data.
+    const cacheKey = `update:manifest:v2:${createHash('sha256').update(url).digest('hex')}`;
     // Try Redis cache first.
     try {
-      const cached = await this.redis.get(CACHE_KEY);
+      const cached = await this.redis.get(cacheKey);
       if (cached) {
         const parsed = JSON.parse(cached) as UpdateManifest;
-        if (parsed && typeof parsed.version === 'string') return parsed;
+        if (isActiveManifest(parsed)) return parsed;
       }
     } catch {
       // corrupt cache — fall through to fetch
@@ -88,12 +88,12 @@ export class UpdateCheckService {
     try {
       const res = await this.http.get<UpdateManifest>(url);
       const manifest = res.data;
-      if (!manifest || typeof manifest.version !== 'string') {
-        this.logger.warn(`update manifest at ${url} has no version field`);
+      if (!isActiveManifest(manifest)) {
+        this.logger.warn(`update manifest at ${url} is invalid, inactive, or expired`);
         return null;
       }
       try {
-        await this.redis.set(CACHE_KEY, JSON.stringify(manifest), CACHE_TTL_SECONDS);
+        await this.redis.set(cacheKey, JSON.stringify(manifest), CACHE_TTL_SECONDS);
       } catch (err) {
         this.logger.debug(`update manifest cache write failed: ${(err as Error).message}`);
       }
@@ -105,6 +105,15 @@ export class UpdateCheckService {
   }
 }
 
+function isActiveManifest(value: unknown): value is UpdateManifest {
+  if (!value || typeof value !== 'object') return false;
+  const manifest = value as UpdateManifest;
+  if (typeof manifest.version !== 'string' || !/^\d+\.\d+\.\d+$/.test(manifest.version)) return false;
+  if (manifest.status && manifest.status !== 'active') return false;
+  if (manifest.expiresAt && !(Date.parse(manifest.expiresAt) > Date.now())) return false;
+  return true;
+}
+
 function emptyStatus(current: string): VersionStatus {
   return {
     current,
@@ -113,11 +122,12 @@ function emptyStatus(current: string): VersionStatus {
     releasedAt: null,
     changelogUrl: null,
     image: null,
+    releaseNotes: null,
   };
 }
 
 /**
- * Compare two semver-ish strings ("4.1.0" vs "4.2.0"). Returns >0 if a > b,
+ * Compare two semver-ish strings ("1.1.0" vs "1.2.0"). Returns >0 if a > b,
  * 0 if equal, <0 if a < b. Non-numeric segments are compared as 0. Tolerates
  * pre-release suffixes by ignoring them (strips everything after the first non
  * [0-9.] character run).

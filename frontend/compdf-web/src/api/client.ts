@@ -114,7 +114,8 @@ function isAdminRoute(url: string | undefined): boolean {
   return url.startsWith('/dashboard/') || url.startsWith('dashboard/')
     || url.startsWith('/auth/change-password') || url.startsWith('auth/change-password')
     || url.startsWith('/auth/logout') || url.startsWith('auth/logout')
-    || url.startsWith('/license/upload') || url.startsWith('license/upload');
+    || url.startsWith('/license/upload') || url.startsWith('license/upload')
+    || url.startsWith('/license/download') || url.startsWith('license/download');
 }
 
 export const http: AxiosInstance = axios.create({
@@ -147,7 +148,8 @@ http.interceptors.response.use(
       if (isAdminRoute(url) && !isCurrentPasswordIncorrect(err)) {
         clearSession();
         if (typeof window !== 'undefined' && !window.location.pathname.endsWith('/admin/login')) {
-          window.location.assign('/admin/login');
+          const redirect = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+          window.location.assign(`/admin/login?redirect=${encodeURIComponent(redirect)}`);
         }
       }
       // Tool-route 401 (bad/missing API key) is surfaced to the caller.

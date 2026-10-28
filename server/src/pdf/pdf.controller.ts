@@ -16,6 +16,7 @@
 import {
   BadRequestException,
   Controller,
+  HttpCode,
   Logger,
   Post,
   Req,
@@ -28,13 +29,14 @@ import {
 import { FileFieldsInterceptor, FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { ApiKeyGuard } from '../auth/guards/api-key.guard';
-import { PdfSdkClient, SdkFileResult } from '../clients/pdf-sdk.client';
+import { BatesConfiguration, HeaderFooterConfiguration, PdfSdkClient, SdkFileResult } from '../clients/pdf-sdk.client';
 import { ErrorCode } from '../common/errors/error-codes';
 import { contentDispositionAttachment, normalizeUploadedFilename, parseFilenameFromHeader, processedFilename, sanitizeFilename } from '../common/utils/filename';
 import { validateCompressRequest } from './compression-validation';
 import { validateEncryptRequest } from './encryption-validation';
 import { validateDeletePagesRequest, validateInsertFromPdfRequest } from './page-range-validation';
 import { validateAddWatermarkRequest } from './watermark-validation';
+import { parseDecorationRequest, validateDecorationRequest } from './decoration-validation';
 
 type MulterFile = Express.Multer.File;
 
@@ -190,6 +192,74 @@ export class PdfController {
     this.sendFile(res, result, 'watermark-removed.pdf');
   }
 
+  // ---- Headers / Footers / Bates ------------------------------------------
+
+  @Post('headers-footers/add')
+  @UseInterceptors(FileInterceptor('file'))
+  async addHeadersFooters(@UploadedFile() file: MulterFile, @Req() req: Request, @Res() res: Response): Promise<void> {
+    const upload = requireDecorationFile(file);
+    const request = parseDecorationRequest(req.body?.request);
+    validateDecorationRequest('headers-footers/add', request);
+    this.logIncoming('headers-footers/add', request, [upload]);
+    const result = await this.client.addHeadersFooters(upload, request, tokenOf(req));
+    this.sendFile(res, result, 'with-header-footer.pdf', requestedOutputFilename(request));
+  }
+
+  @Post('headers-footers/remove')
+  @UseInterceptors(FileInterceptor('file'))
+  async removeHeadersFooters(@UploadedFile() file: MulterFile, @Req() req: Request, @Res() res: Response): Promise<void> {
+    const upload = requireDecorationFile(file);
+    const request = parseDecorationRequest(req.body?.request);
+    validateDecorationRequest('headers-footers/remove', request);
+    this.logIncoming('headers-footers/remove', request, [upload]);
+    const result = await this.client.removeHeadersFooters(upload, request, tokenOf(req));
+    this.sendFile(res, result, 'header-footer-removed.pdf', requestedOutputFilename(request));
+  }
+
+  @Post('bates/add')
+  @UseInterceptors(FileInterceptor('file'))
+  async addBates(@UploadedFile() file: MulterFile, @Req() req: Request, @Res() res: Response): Promise<void> {
+    const upload = requireDecorationFile(file);
+    const request = parseDecorationRequest(req.body?.request);
+    validateDecorationRequest('bates/add', request);
+    this.logIncoming('bates/add', request, [upload]);
+    const result = await this.client.addBates(upload, request, tokenOf(req));
+    this.sendFile(res, result, 'with-bates.pdf', requestedOutputFilename(request));
+  }
+
+  @Post('bates/remove')
+  @UseInterceptors(FileInterceptor('file'))
+  async removeBates(@UploadedFile() file: MulterFile, @Req() req: Request, @Res() res: Response): Promise<void> {
+    const upload = requireDecorationFile(file);
+    const request = parseDecorationRequest(req.body?.request);
+    validateDecorationRequest('bates/remove', request);
+    this.logIncoming('bates/remove', request, [upload]);
+    const result = await this.client.removeBates(upload, request, tokenOf(req));
+    this.sendFile(res, result, 'bates-removed.pdf', requestedOutputFilename(request));
+  }
+
+  @Post('headers-footers/read')
+  @HttpCode(200)
+  @UseInterceptors(FileInterceptor('file'))
+  async readHeadersFooters(@UploadedFile() file: MulterFile, @Req() req: Request): Promise<HeaderFooterConfiguration> {
+    const upload = requireDecorationFile(file);
+    const request = parseDecorationRequest(req.body?.request);
+    validateDecorationRequest('headers-footers/read', request);
+    this.logIncoming('headers-footers/read', request, [upload]);
+    return this.client.readHeadersFooters(upload, request, tokenOf(req));
+  }
+
+  @Post('bates/read')
+  @HttpCode(200)
+  @UseInterceptors(FileInterceptor('file'))
+  async readBates(@UploadedFile() file: MulterFile, @Req() req: Request): Promise<BatesConfiguration> {
+    const upload = requireDecorationFile(file);
+    const request = parseDecorationRequest(req.body?.request);
+    validateDecorationRequest('bates/read', request);
+    this.logIncoming('bates/read', request, [upload]);
+    return this.client.readBates(upload, request, tokenOf(req));
+  }
+
   // ---- Standards / Optimize ----------------------------------------------
 
   @Post('pdfa')
@@ -343,6 +413,13 @@ function tokenOf(req: Request): string {
 function requireFile(file: MulterFile | undefined, field: string): MulterFile {
   if (!file) {
     throw new BadRequestException({ code: ErrorCode.BAD_REQUEST, message: `missing required file field: ${field}` });
+  }
+  return file;
+}
+
+function requireDecorationFile(file: MulterFile | undefined): MulterFile {
+  if (!file?.buffer?.length) {
+    throw new BadRequestException({ code: ErrorCode.FILE_REQUIRED, message: 'a nonempty file is required.' });
   }
   return file;
 }

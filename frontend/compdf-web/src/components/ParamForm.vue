@@ -47,6 +47,8 @@ const props = defineProps<{
   files: File[];
   /** Disable all controls while a conversion is in flight. */
   converting?: boolean;
+  /** Batch shell owns file passwords and the document list. */
+  batch?: boolean;
 }>();
 
 // Local form models. Picked files round-trip back here for
@@ -118,12 +120,30 @@ const hasCompressOptions = computed(() => props.toType === 'compress');
 const hasMergeOptions = computed(() => props.toType === 'merge');
 const hasSplitOptions = computed(() => props.toType === 'split');
 
+const blankPageSizePresets = {
+  a4: { width: '595', height: '842' },
+  a3: { width: '842', height: '1191' },
+  legal: { width: '612', height: '1008' },
+} as const;
+
+function applyBlankPageSize(value: unknown): void {
+  const pageSize = String(value) as keyof typeof blankPageSizePresets | 'custom';
+  const preset = blankPageSizePresets[pageSize as keyof typeof blankPageSizePresets];
+  if (!preset) return;
+  parameter.value.insertWidth = preset.width;
+  parameter.value.insertHeight = preset.height;
+}
+
 /** OCR-dependent disabled state: language/scope/bg switches grey out when OCR is off and not searchablePdf. */
 const ocrDisabled = computed(() => converting.value || (!Number(parameter.value.enableOcr) && !isSearchablePdf.value));
 const ocrLabelDim = computed(() => !Number(parameter.value.enableOcr) && !isSearchablePdf.value);
 
 // ---- static option lists ---------------------------------------------------
-const rotateAngles = [90, 180, 270];
+const rotateDirections = [
+  { value: '270', key: 'left' },
+  { value: '90', key: 'right' },
+  { value: '180', key: 'flip' },
+] as const;
 const imageFormats = ['png', 'jpg', 'jpeg', 'jpeg2000', 'bmp', 'tiff', 'tga', 'gif', 'webp'];
 const pageRangePlaceholder = computed(() => `all ${t('pdfToolDetail.upload.settings.pageRangeOr')} 1-3,5`);
 const ocrLanguages = [
@@ -332,9 +352,9 @@ watch(
 
 <template>
   <TooltipProvider :delay-duration="100">
-  <div class="param-form" :class="{ 'file-card-form': hasSplitOptions || hasMergeOptions, 'markdown-form': isMarkdown, 'standard-form': hasStandardOptions }">
+  <div class="param-form" :class="{ 'batch-form': batch, 'file-card-form': hasSplitOptions || hasMergeOptions, 'markdown-form': isMarkdown, 'standard-form': hasStandardOptions }">
     <template v-if="hasStandardOptions">
-      <div class="setting-row">
+      <div v-if="!batch" class="setting-row">
         <div class="setting-label">{{ t('pdfToolDetail.upload.settings.password') }}:</div>
         <div class="setting-control">
           <input type="password" v-model="password" :disabled="converting" class="text-input">
@@ -440,7 +460,11 @@ watch(
         </Tooltip>:
       </div>
       <div class="setting-control">
-        <div class="radio-row">
+        <select v-if="batch" v-model="parameter.pageLayoutMode" :disabled="converting" class="select-input" :aria-label="t('pdfToolDetail.upload.settings.layoutSetting')">
+          <option value="e_Box">{{ t('pdfToolDetail.upload.settings.fixedLayout') }}</option>
+          <option value="e_Flow" :disabled="forbidFlowLayout">{{ t('pdfToolDetail.upload.settings.hybridLayout') }}</option>
+        </select>
+        <div v-else class="radio-row">
           <label><input type="radio" name="pageLayoutMode" value="e_Box" v-model="parameter.pageLayoutMode" :disabled="converting"> {{ t('pdfToolDetail.upload.settings.fixedLayout') }}</label>
           <label><input type="radio" name="pageLayoutMode" value="e_Flow" v-model="parameter.pageLayoutMode" :disabled="forbidFlowLayout || converting"> {{ t('pdfToolDetail.upload.settings.hybridLayout') }}</label>
         </div>
@@ -486,14 +510,64 @@ watch(
       </div>
     </div>
 
-    <!-- 8. Rotate angle -->
+    <div v-if="hasAllowOcr || hasOcrSettings" class="ocr-section">
+      <!-- 38. Allow OCR -->
+      <div v-if="hasAllowOcr" class="setting-row-switch" :class="{ 'markdown-order-3': isMarkdown }">
+        <div class="setting-label">
+          {{ t('pdfToolDetail.upload.settings.allowOcr') }}<Tooltip>
+            <TooltipTrigger as-child>
+              <button type="button" class="tip" :aria-label="t('pdfToolDetail.upload.settings.allowOcrTip')">?</button>
+            </TooltipTrigger>
+            <TooltipContent>{{ t('pdfToolDetail.upload.settings.allowOcrTip') }}</TooltipContent>
+          </Tooltip>:
+        </div>
+        <label class="switch"><input type="checkbox" v-model="parameter.enableOcr" true-value="1" false-value="0" :aria-label="t('pdfToolDetail.upload.settings.allowOcr')" :disabled="converting"><span class="track"></span></label>
+      </div>
+
+      <div v-if="hasOcrSettings" class="ocr-options">
+        <!-- 38.1 OCR language -->
+        <div v-if="hasOcrSettings" class="setting-row" :class="{ 'markdown-order-4': isMarkdown }">
+          <div class="setting-label" :class="{ dim: ocrLabelDim }">{{ t('pdfToolDetail.upload.settings.ocrLanguage') }}:</div>
+          <div class="setting-control">
+            <Select v-model="parameter.ocrRecognitionLang" :disabled="ocrDisabled">
+              <SelectTrigger class="select-input"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="lang in ocrLanguages" :key="lang" :value="lang">
+                  {{ t(`pdfToolDetail.upload.ocrLanguages.${lang}`) }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <!-- 38.2 OCR range -->
+        <div v-if="hasOcrSettings" class="setting-row" :class="{ 'markdown-order-5': isMarkdown }">
+          <div class="setting-label" :class="{ dim: ocrLabelDim }">{{ t('pdfToolDetail.upload.settings.ocrRange') }}:</div>
+          <div class="setting-control">
+            <Select v-model="parameter.ocrOption" :disabled="ocrDisabled">
+              <SelectTrigger class="select-input"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem v-for="option in ocrOptions" :key="option" :value="option">
+                  {{ t(`pdfToolDetail.upload.ocrOptions.${option}`) }}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- 8. Rotate direction -->
     <div v-if="hasRotateAngle" class="setting-row">
-      <div class="setting-label">{{ t('pdfToolDetail.upload.settings.angle') }}:</div>
+      <div class="setting-label">{{ t('pdfToolDetail.upload.settings.rotateDirection') }}:</div>
       <div class="setting-control">
         <Select v-model="parameter.rotateAngle" :disabled="converting">
           <SelectTrigger class="select-input"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem v-for="a in rotateAngles" :key="a" :value="String(a)">{{ a }}</SelectItem>
+            <SelectItem v-for="direction in rotateDirections" :key="direction.value" :value="direction.value">
+              {{ t(`pdfToolDetail.upload.settings.rotateDirections.${direction.key}`) }}
+            </SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -526,10 +600,25 @@ watch(
       <!-- 12. Blank page size -->
       <div v-if="parameter.insertActionType === 'BLANK'" class="setting-row">
         <div class="setting-label">{{ t('pdfToolDetail.upload.settings.blankPageSize') }}:</div>
-        <div class="setting-control">
-          <div class="pair-row">
-            <input type="number" min="1" v-model="parameter.insertWidth" :placeholder="t('pdfToolDetail.upload.settings.width')" :disabled="converting" class="num-input">
-            <input type="number" min="1" v-model="parameter.insertHeight" :placeholder="t('pdfToolDetail.upload.settings.height')" :disabled="converting" class="num-input">
+        <div class="setting-control blank-page-size-control">
+          <Select v-model="parameter.insertPageSize" :disabled="converting" @update:model-value="applyBlankPageSize">
+            <SelectTrigger class="select-input"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="a4">{{ t('pdfToolDetail.upload.settings.pageSizes.a4') }}</SelectItem>
+              <SelectItem value="a3">{{ t('pdfToolDetail.upload.settings.pageSizes.a3') }}</SelectItem>
+              <SelectItem value="legal">{{ t('pdfToolDetail.upload.settings.pageSizes.legal') }}</SelectItem>
+              <SelectItem value="custom">{{ t('pdfToolDetail.upload.settings.pageSizes.custom') }}</SelectItem>
+            </SelectContent>
+          </Select>
+          <div v-if="parameter.insertPageSize === 'custom'" class="pair-row dimension-row">
+            <label class="dimension-field">
+              <input type="number" min="1" v-model="parameter.insertWidth" :placeholder="t('pdfToolDetail.upload.settings.width')" :aria-label="t('pdfToolDetail.upload.settings.width')" :disabled="converting" class="num-input">
+              <span class="dimension-unit" aria-hidden="true">{{ t('pdfToolDetail.upload.settings.dimensionUnit') }}</span>
+            </label>
+            <label class="dimension-field">
+              <input type="number" min="1" v-model="parameter.insertHeight" :placeholder="t('pdfToolDetail.upload.settings.height')" :aria-label="t('pdfToolDetail.upload.settings.height')" :disabled="converting" class="num-input">
+              <span class="dimension-unit" aria-hidden="true">{{ t('pdfToolDetail.upload.settings.dimensionUnit') }}</span>
+            </label>
           </div>
         </div>
       </div>
@@ -702,11 +791,6 @@ watch(
       </div>
     </template>
 
-    <div v-if="hasAiLayout" class="setting-row-switch" :class="{ 'markdown-order-11': isMarkdown }">
-      <div class="setting-label">{{ t('pdfToolDetail.upload.settings.aiLayoutAnalysis') }}:</div>
-      <label class="switch"><input type="checkbox" v-model="parameter.enableAiLayout" true-value="1" false-value="0" :disabled="converting"><span class="track"></span></label>
-    </div>
-
     <!-- 29. Include images -->
     <div v-if="hasContainImg" class="setting-row-switch" :class="{ 'markdown-order-6': isMarkdown }">
       <div class="setting-label">
@@ -733,6 +817,19 @@ watch(
       <label class="switch"><input type="checkbox" v-model="parameter.isContainAnnot" true-value="1" false-value="0" :disabled="converting"><span class="track"></span></label>
     </div>
 
+    <!-- 35. Retain background -->
+    <div v-if="hasRetainBgImg" class="setting-row-switch" :class="{ 'markdown-order-8': isMarkdown }">
+      <div class="setting-label" :class="{ dim: ocrLabelDim }">
+        {{ t('pdfToolDetail.upload.settings.retainBackground') }}<Tooltip>
+          <TooltipTrigger as-child>
+            <button type="button" class="tip" :aria-label="t('pdfToolDetail.upload.settings.retainBackgroundTip')">?</button>
+          </TooltipTrigger>
+          <TooltipContent>{{ t('pdfToolDetail.upload.settings.retainBackgroundTip') }}</TooltipContent>
+        </Tooltip>:
+      </div>
+      <label class="switch"><input type="checkbox" v-model="parameter.containPageBackgroundImage" true-value="1" false-value="0" :disabled="ocrDisabled"><span class="track"></span></label>
+    </div>
+
     <!-- 31. Formula to image -->
     <div v-if="hasFormulaToImage" class="setting-row-switch" :class="{ 'markdown-order-9': isMarkdown }">
       <div class="setting-label">
@@ -750,19 +847,6 @@ watch(
     <div v-if="hasPageOneOutput" class="setting-row-switch" :class="{ 'markdown-order-10': isMarkdown }">
       <div class="setting-label">{{ t('pdfToolDetail.upload.settings.pageOutput') }}:</div>
       <label class="switch"><input type="checkbox" v-model="parameter.isOutputDocumentPerPage" true-value="1" false-value="0" :disabled="converting"><span class="track"></span></label>
-    </div>
-
-    <!-- 35. Retain background -->
-    <div v-if="hasRetainBgImg" class="setting-row-switch" :class="{ 'markdown-order-8': isMarkdown }">
-      <div class="setting-label" :class="{ dim: ocrLabelDim }">
-        {{ t('pdfToolDetail.upload.settings.retainBackground') }}<Tooltip>
-          <TooltipTrigger as-child>
-            <button type="button" class="tip" :aria-label="t('pdfToolDetail.upload.settings.retainBackgroundTip')">?</button>
-          </TooltipTrigger>
-          <TooltipContent>{{ t('pdfToolDetail.upload.settings.retainBackgroundTip') }}</TooltipContent>
-        </Tooltip>:
-      </div>
-      <label class="switch"><input type="checkbox" v-model="parameter.containPageBackgroundImage" true-value="1" false-value="0" :disabled="ocrDisabled"><span class="track"></span></label>
     </div>
 
     <!-- 36. Transparent text -->
@@ -784,47 +868,9 @@ watch(
       </div>
     </div>
 
-    <!-- 38. Allow OCR -->
-    <div v-if="hasAllowOcr" class="setting-row-switch" :class="{ 'markdown-order-3': isMarkdown }">
-      <div class="setting-label">
-        {{ t('pdfToolDetail.upload.settings.allowOcr') }}<Tooltip>
-          <TooltipTrigger as-child>
-            <button type="button" class="tip" :aria-label="t('pdfToolDetail.upload.settings.allowOcrTip')">?</button>
-          </TooltipTrigger>
-          <TooltipContent>{{ t('pdfToolDetail.upload.settings.allowOcrTip') }}</TooltipContent>
-        </Tooltip>:
-      </div>
-      <label class="switch"><input type="checkbox" v-model="parameter.enableOcr" true-value="1" false-value="0" :disabled="converting"><span class="track"></span></label>
-    </div>
-
-    <!-- 38.1 OCR language -->
-    <div v-if="hasOcrSettings" class="setting-row" :class="{ 'markdown-order-4': isMarkdown }">
-      <div class="setting-label" :class="{ dim: ocrLabelDim }">{{ t('pdfToolDetail.upload.settings.ocrLanguage') }}:</div>
-      <div class="setting-control">
-        <Select v-model="parameter.ocrRecognitionLang" :disabled="ocrDisabled">
-          <SelectTrigger class="select-input"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem v-for="lang in ocrLanguages" :key="lang" :value="lang">
-              {{ t(`pdfToolDetail.upload.ocrLanguages.${lang}`) }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-    </div>
-
-    <!-- 38.2 OCR range -->
-    <div v-if="hasOcrSettings" class="setting-row" :class="{ 'markdown-order-5': isMarkdown }">
-      <div class="setting-label" :class="{ dim: ocrLabelDim }">{{ t('pdfToolDetail.upload.settings.ocrRange') }}:</div>
-      <div class="setting-control">
-        <Select v-model="parameter.ocrOption" :disabled="ocrDisabled">
-          <SelectTrigger class="select-input"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem v-for="option in ocrOptions" :key="option" :value="option">
-              {{ t(`pdfToolDetail.upload.ocrOptions.${option}`) }}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+    <div v-if="hasAiLayout" class="setting-row-switch" :class="{ 'markdown-order-11': isMarkdown }">
+      <div class="setting-label">{{ t('pdfToolDetail.upload.settings.aiLayoutAnalysis') }}:</div>
+      <label class="switch"><input type="checkbox" v-model="parameter.enableAiLayout" true-value="1" false-value="0" :disabled="converting"><span class="track"></span></label>
     </div>
 
     <!-- 39. Merge CSV -->
@@ -834,7 +880,7 @@ watch(
     </div>
 
     <!-- 40. PDF password -->
-    <div v-if="hasPassword && !hasSplitOptions && !hasStandardOptions" class="setting-row" :class="{ 'markdown-order-1': isMarkdown }">
+    <div v-if="hasPassword && !batch && !hasSplitOptions && !hasStandardOptions" class="setting-row" :class="{ 'markdown-order-1': isMarkdown }">
       <div class="setting-label">{{ t('pdfToolDetail.upload.settings.password') }}:</div>
       <div class="setting-control">
         <input type="text" v-model="password" :disabled="converting" class="text-input">
@@ -852,7 +898,7 @@ watch(
     </template>
 
     <!-- 44. Merge per-file options -->
-    <template v-if="hasMergeOptions">
+    <template v-if="hasMergeOptions && !batch">
       <div
         v-for="(selectedFile, index) in files"
         :key="`${selectedFile.name}-${selectedFile.size}-${selectedFile.lastModified}-merge-options`"
@@ -980,6 +1026,11 @@ watch(
 .file-card-form {
   max-width: 100%;
 }
+.ocr-section, .ocr-options { display: contents; }
+.batch-form .ocr-section { display: block; margin-bottom: 20px; }
+.batch-form .ocr-options { display: flex; flex-direction: column; gap: 16px; padding: 12px; border-radius: 6px; background: #f5f7ff; }
+.batch-form .ocr-options .setting-row { margin: 0; }
+.markdown-form.batch-form .ocr-section { order: 3; }
 .markdown-form {
   display: flex;
   flex-direction: column;
@@ -1017,6 +1068,11 @@ watch(
 .setting-control {
   flex: 0 1 auto;
   min-width: 0;
+}
+.blank-page-size-control {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 .icc-profile-control {
   position: relative;
@@ -1062,6 +1118,25 @@ watch(
 .pair-row {
   display: flex;
   gap: 8px;
+}
+.dimension-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.dimension-field .num-input {
+  flex: 1 1 0;
+  width: 0;
+  min-width: 0;
+  padding-right: 14px;
+}
+.dimension-unit {
+  flex: none;
+  color: #6a6f77;
+  font-size: 14px;
+  line-height: 20px;
 }
 .pair-row .text-input,
 .pair-row .num-input {

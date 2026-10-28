@@ -3,6 +3,7 @@ node_modules/
 server-node-modules/
 server-storage/
 dist/
+updater/bin/
 
 # Test artifacts
 coverage/
@@ -13,6 +14,10 @@ jest-cache/
 server/tmp/
 test-results/
 playwright-report/
+output/playwright/
+.playwright-cli/
+tmp/local-update/
+tmp/runtime-updater/
 *.lcov
 junit.xml
 
@@ -27,6 +32,8 @@ __pycache__/
 # Env & secrets (never commit real values)
 .env
 configs/license.local.jwt
+configs/app-license/*
+!configs/app-license/.gitkeep
 
 # Logs
 *.log
@@ -41,3 +48,23 @@ configs/license.local.jwt
 _workplace/
 
 test/
+
+# Public repository: local runtime, authorizations and generated assets
+.env.*
+!.env.example
+.idea/
+.vscode/
+data/
+output/
+tmp/
+fonts/windows/*
+!fonts/windows/.gitkeep
+server/public/compdf-web/
+server/release/
+updater/tmp-build/
+*.tsbuildinfo
+*.pem
+*.key
+*private-key*
+.tmp-*
+release-spec-*.json

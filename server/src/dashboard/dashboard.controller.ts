@@ -13,7 +13,7 @@
  * (existing). The Account page calls that endpoint directly.
  */
 import {
-  BadRequestException, Body, Controller, Get, NotFoundException, Param, Patch,
+  BadRequestException, Body, Controller, Get, HttpException, NotFoundException, Param, Patch,
   Post, Put, Query, Req, Res, UploadedFile, UseGuards, UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -28,8 +28,11 @@ import { BrandSettingsService } from './brand-settings.service';
 import { DashboardService } from './dashboard.service';
 import { SystemLogService } from './system-log.service';
 import {
-  ClientErrorDto, LogEntry, LogsQueryDto, OverviewQueryDto, PaginationDto, UpdateAccountDto, UpdateSettingsDto,
+  ApiKeyActionDto, ClientErrorDto, LogEntry, LogsQueryDto, OverviewQueryDto, PaginationDto, UpdateAccountDto, UpdateApplyDto, UpdateBackupDto, UpdateCancelDto, UpdateCheckDto, UpdateJobDto, UpdateRollbackDto, UpdateRuntimeModeDto, UpdateSettingsDto,
 } from './dashboard.dto';
+import { RuntimeModeService } from '../runtime/runtime-mode.service';
+import { TaskDrainService } from '../runtime/task-drain.service';
+import { UpdaterClientService, UpdaterResponse } from './updater-client.service';
 
 @Controller('api/v1/dashboard')
 @UseGuards(JwtAuthGuard)
@@ -42,8 +45,87 @@ export class DashboardController {
     private readonly systemLog: SystemLogService,
     config: ConfigService,
     private readonly auth: AuthService,
+    private readonly runtimeMode: RuntimeModeService,
+    private readonly taskDrain: TaskDrainService,
+    private readonly updater: UpdaterClientService,
   ) {
     this.storageDir = config.get<string>('storageDir') ?? 'storage';
+  }
+
+  @Get('runtime-mode')
+  async getRuntimeMode() {
+    return {
+      state: this.runtimeMode.getState(),
+      tasks: await this.taskDrain.getSnapshot(),
+    };
+  }
+
+  @Put('runtime-mode')
+  async updateRuntimeMode(@Body() dto: UpdateRuntimeModeDto, @Req() req: Request & { user: AdminPayload }) {
+    const state = this.runtimeMode.setMode(dto.mode, {
+      operator: req.user.username,
+      requestId: dto.requestId,
+      reason: dto.reason,
+    });
+    await this.dashboard.recordUserAction(
+      req.user.username,
+      'update_runtime_mode',
+      dto.mode,
+      `Changed runtime mode to ${dto.mode}; requestId=${dto.requestId}.`,
+    );
+    return { state, tasks: await this.taskDrain.getSnapshot() };
+  }
+
+  @Get('update/current')
+  async getUpdateStatus() {
+    return unwrapUpdater(await this.updater.get('/v1/status'));
+  }
+
+  @Get('update/history')
+  async getUpdateHistory() {
+    return unwrapUpdater(await this.updater.get('/v1/history'));
+  }
+
+  @Get('update/automation')
+  async getUpdateAutomation() {
+    return unwrapUpdater(await this.updater.get('/v1/automation'));
+  }
+
+  @Post('update/check')
+  async checkForUpdate(@Body() dto: UpdateCheckDto, @Req() req: Request & { user: AdminPayload }) {
+    return this.executeUpdaterAction(req.user.username, 'update_check', dto.currentVersion, this.updater.post('/v1/check', dto));
+  }
+
+  @Post('update/download')
+  async downloadUpdate(@Body() dto: UpdateJobDto, @Req() req: Request & { user: AdminPayload }) {
+    return this.executeUpdaterAction(req.user.username, 'update_download', dto.targetVersion, this.updater.post('/v1/download', dto, 30 * 60_000));
+  }
+
+  @Post('update/cancel')
+  async cancelUpdate(@Body() dto: UpdateCancelDto, @Req() req: Request & { user: AdminPayload }) {
+    return this.executeUpdaterAction(req.user.username, 'update_cancel', dto.requestId, this.updater.post('/v1/cancel', dto));
+  }
+
+  @Post('update/preflight')
+  async preflightUpdate(@Body() dto: UpdateJobDto, @Req() req: Request & { user: AdminPayload }) {
+    const response = await this.updater.post('/v1/preflight', dto);
+    if (response.body.exitCode === 3 && response.body.result) return response.body.result;
+    return this.executeUpdaterAction(req.user.username, 'update_preflight', dto.targetVersion, Promise.resolve(response));
+  }
+
+  @Post('update/backup')
+  async backupForUpdate(@Body() dto: UpdateBackupDto, @Req() req: Request & { user: AdminPayload }) {
+    return this.executeUpdaterAction(req.user.username, 'update_backup', dto.requestId, this.updater.post('/v1/backup', dto, 120_000));
+  }
+
+  @Post('update/apply')
+  async applyUpdate(@Body() dto: UpdateApplyDto, @Req() req: Request & { user: AdminPayload }) {
+    return this.executeUpdaterAction(req.user.username, 'update_apply', dto.targetVersion, this.updater.post('/v1/apply', dto, 15 * 60_000));
+  }
+
+  @Post('update/rollback')
+  async rollbackUpdate(@Body() dto: UpdateRollbackDto, @Req() req: Request & { user: AdminPayload }) {
+    return this.executeUpdaterAction(req.user.username, 'update_rollback', dto.requestId, this.updater.post('/v1/rollback', dto, 15 * 60_000));
   }
 
   @Get('overview')
@@ -101,6 +183,12 @@ export class DashboardController {
   @Get('api-keys')
   apiKeys() {
     return this.dashboard.getApiKeys();
+  }
+
+  @Post('api-keys/actions')
+  async recordApiKeyAction(@Body() dto: ApiKeyActionDto, @Req() req: Request & { user: AdminPayload }): Promise<{ ok: true }> {
+    await this.dashboard.recordApiKeyAction(req.user.username, dto);
+    return { ok: true };
   }
 
   @Get('version')
@@ -216,6 +304,17 @@ export class DashboardController {
     );
     return updated;
   }
+
+  private async executeUpdaterAction<T>(
+    operator: string,
+    action: string,
+    target: string,
+    operation: Promise<UpdaterResponse<T>>,
+  ): Promise<T | null> {
+    const result = unwrapUpdater(await operation);
+    await this.dashboard.recordUserAction(operator, action, target, `Updater action ${action} completed for ${target}.`);
+    return result;
+  }
 }
 
 function settingsSummary(dto: UpdateSettingsDto): string {
@@ -251,4 +350,16 @@ function csvField(v: unknown): string {
   const s = String(v);
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
+}
+
+function unwrapUpdater<T>(response: UpdaterResponse<T>): T | null {
+  if (response.statusCode >= 400 || response.body.exitCode !== 0) {
+    throw new HttpException({
+      code: 'UPDATER_OPERATION_FAILED',
+      message: response.body.error ?? 'Updater operation failed.',
+      updaterExitCode: response.body.exitCode,
+      result: response.body.result ?? null,
+    }, response.statusCode >= 400 ? response.statusCode : 409);
+  }
+  return response.body.result ?? null;
 }

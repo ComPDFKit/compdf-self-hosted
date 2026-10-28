@@ -1,0 +1,2 @@
+# Keep scripts and signed/migration inputs byte-stable across developer platforms.
+* text=auto eol=lf

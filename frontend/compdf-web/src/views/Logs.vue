@@ -126,7 +126,7 @@ function resultBadgeClass(r: string | null) {
     : 'bg-slate-100 text-slate-600';
 }
 function resultLabel(r: string | null) {
-  return r === 'success' ? t('overview.success') : r === 'fail' ? t('overview.fail') : t('logs.neutral');
+  return r === 'success' ? t('logs.result.success') : r === 'fail' ? t('logs.result.fail') : t('logs.neutral');
 }
 function categoryLabel(c: string | null): string {
   switch (c) {

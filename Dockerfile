@@ -10,6 +10,8 @@ CMD ["npm", "run", "start:dev"]
 
 FROM node:24-bookworm-slim AS compdf-web-build
 WORKDIR /build/frontend/compdf-web
+ARG VITE_HIDDEN_TOOL_SLUGS=""
+ENV VITE_HIDDEN_TOOL_SLUGS=${VITE_HIDDEN_TOOL_SLUGS}
 COPY frontend/compdf-web/package*.json ./
 RUN npm ci
 COPY frontend/compdf-web ./
@@ -21,16 +23,21 @@ COPY server/package*.json ./
 RUN npm ci
 COPY server ./
 RUN npm run build
-RUN npm prune --omit=dev
+RUN npm prune --omit=dev \
+    && find dist -type f \( -name "*.spec.js" -o -name "*.spec.js.map" -o -name "*.spec.d.ts" \) -delete
 
 FROM node:24-bookworm-slim AS production
 WORKDIR /app
 
+ARG COMPDF_VERSION=1.1.0
+
 ENV NODE_ENV=production \
     PORT=8080 \
+    COMPDF_VERSION=${COMPDF_VERSION} \
     PUBLIC_DIR=/app/public \
     LICENSE_TOKEN_PATH=/app/configs/license.jwt \
-    INIT_SQL_PATH=/app/configs/init.sql \
+    INIT_SQL_PATH=/app/release/init.sql \
+    MIGRATIONS_PATH=/app/release/migrations \
     SETTINGS_PATH=/app/configs/settings.yml \
     STORAGE_DIR=/app/storage
 
@@ -38,7 +45,10 @@ COPY --from=server-build /build/server/package*.json ./
 COPY --from=server-build /build/server/node_modules ./node_modules
 COPY --from=server-build /build/server/dist ./dist
 COPY --from=compdf-web-build /build/frontend/compdf-web/dist ./public/compdf-web
-COPY configs/init.sql ./configs/init.sql
+COPY configs/init.sql ./release/init.sql
+COPY migrations ./release/migrations
+COPY release/version.json ./release/version.json
+COPY deployment ./deployment
 COPY configs/settings.yml ./configs/settings.yml
 
 RUN touch /app/configs/license.jwt \

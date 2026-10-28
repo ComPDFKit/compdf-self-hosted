@@ -1,0 +1,8 @@
+# Source build + infrastructure + containerized updater, including Docker Desktop.
+# docker compose -f docker-compose.full.yml up -d --build --wait --wait-timeout 600
+include:
+  - path:
+      - docker-compose.yml
+      - docker-compose.build.yml
+      - docker-compose.updater-container.yml
+      - updater/packaging/compose-build.yml

@@ -17,7 +17,8 @@
 export type PdfOp =
   | 'merge' | 'split' | 'insert-from-pdf' | 'insert-blank'
   | 'delete' | 'rotate' | 'compress'
-  | 'watermark/add' | 'watermark/remove' | 'encrypt' | 'decrypt' | 'pdfa';
+  | 'watermark/add' | 'watermark/remove' | 'encrypt' | 'decrypt' | 'pdfa'
+  | 'headers-footers/add' | 'headers-footers/remove' | 'bates/add' | 'bates/remove';
 
 export type Endpoint =
   | { kind: 'pdf'; op: PdfOp }
@@ -37,7 +38,7 @@ export interface ToolSection {
   tools: ToolDef[];
 }
 
-const IMG = '.jpg,.png,.jpeg,.bmp';
+const IMG = '.png,.jpg,.jpeg,.jp2000,.bmp,.tiff,.webp,.gif';
 
 const ALL: ToolDef[] = [
   // PDF to other formats.
@@ -59,7 +60,7 @@ const ALL: ToolDef[] = [
   { slug: 'word-to-pdf', icon: 'word_to_pdf', accept: '.doc,.docx', endpoint: { kind: 'convert-to-pdf', type: 'docx/pdf' } },
   { slug: 'png-to-pdf', icon: 'png_to_pdf', accept: '.png', endpoint: { kind: 'convert-to-pdf', type: 'png/pdf' } },
   { slug: 'rtf-to-pdf', icon: 'rtf_to_pdf', accept: '.rtf', endpoint: { kind: 'convert-to-pdf', type: 'rtf/pdf' } },
-  { slug: 'excel-to-pdf', icon: 'excel_to_pdf', accept: '.xls,.xlsx', endpoint: { kind: 'convert-to-pdf', type: 'xlsx/pdf' } },
+  { slug: 'excel-to-pdf', icon: 'excel_to_pdf', accept: '.xls,.xlsx,.xlsm,.xlsb,.xlt,.xltx,.xltm', endpoint: { kind: 'convert-to-pdf', type: 'xlsx/pdf' } },
   { slug: 'txt-to-pdf', icon: 'txt_to_pdf', accept: '.txt', endpoint: { kind: 'convert-to-pdf', type: 'txt/pdf' } },
   { slug: 'csv-to-pdf', icon: 'csv_to_pdf', accept: '.csv', endpoint: { kind: 'convert-to-pdf', type: 'csv/pdf' } },
   { slug: 'powerpoint-to-pdf', icon: 'ppt_to_pdf', accept: '.ppt,.pptx', endpoint: { kind: 'convert-to-pdf', type: 'pptx/pdf' } },
@@ -87,21 +88,37 @@ const ALL: ToolDef[] = [
   // PDF security.
   { slug: 'add-watermark', icon: 'add_watermark', accept: '.pdf', endpoint: { kind: 'pdf', op: 'watermark/add' } },
   { slug: 'remove-watermark', icon: 'remove_watermark', accept: '.pdf', endpoint: { kind: 'pdf', op: 'watermark/remove' } },
+  { slug: 'add-headers-footers', icon: 'add_headers_footers', accept: '.pdf', endpoint: { kind: 'pdf', op: 'headers-footers/add' } },
+  { slug: 'remove-headers-footers', icon: 'remove_headers_footers', accept: '.pdf', endpoint: { kind: 'pdf', op: 'headers-footers/remove' } },
+  { slug: 'add-bates', icon: 'add_bates', accept: '.pdf', endpoint: { kind: 'pdf', op: 'bates/add' } },
+  { slug: 'remove-bates', icon: 'remove_bates', accept: '.pdf', endpoint: { kind: 'pdf', op: 'bates/remove' } },
   { slug: 'encrypt', icon: 'encryption', accept: '.pdf', endpoint: { kind: 'pdf', op: 'encrypt' } },
   { slug: 'decrypt', icon: 'decryption', accept: '.pdf', endpoint: { kind: 'pdf', op: 'decrypt' } },
 ];
 
+export function visibleTools(tools: ToolDef[], hiddenSlugs: string | undefined): ToolDef[] {
+  const hidden = new Set(
+    (hiddenSlugs ?? '')
+      .split(',')
+      .map((slug) => slug.trim())
+      .filter(Boolean),
+  );
+  return tools.filter((tool) => !hidden.has(tool.slug));
+}
+
+const VISIBLE = visibleTools(ALL, import.meta.env.VITE_HIDDEN_TOOL_SLUGS);
+
 export const TOOL_SECTIONS: ToolSection[] = [
   // image-to-pdf ends with '-to-pdf' but belongs in the image conversion group,
   // so the X-to-PDF section must exclude image-*.
-  { tools: ALL.filter((t) => t.slug.startsWith('pdf-to-')) },
-  { tools: ALL.filter((t) => t.slug.endsWith('-to-pdf') && !t.slug.startsWith('image-')) },
-  { tools: ALL.filter((t) => t.slug.startsWith('image-to-')) },
-  { tools: ALL.filter((t) => ['merge','split','insert','delete','rotate','compress'].includes(t.slug)) },
-  { tools: ALL.filter((t) => ['add-watermark','remove-watermark','encrypt','decrypt'].includes(t.slug)) },
+  { tools: VISIBLE.filter((t) => t.slug.startsWith('pdf-to-')) },
+  { tools: VISIBLE.filter((t) => t.slug.endsWith('-to-pdf') && !t.slug.startsWith('image-')) },
+  { tools: VISIBLE.filter((t) => t.slug.startsWith('image-to-')) },
+  { tools: VISIBLE.filter((t) => ['merge','split','insert','delete','rotate','compress'].includes(t.slug)) },
+  { tools: VISIBLE.filter((t) => ['add-watermark','remove-watermark','add-headers-footers','remove-headers-footers','add-bates','remove-bates','encrypt','decrypt'].includes(t.slug)) },
 ];
 
-const BY_SLUG = new Map(ALL.map((t) => [t.slug, t]));
+const BY_SLUG = new Map(VISIBLE.map((t) => [t.slug, t]));
 
 export function resolveTool(slug: string): ToolDef | null {
   return BY_SLUG.get(slug) ?? null;

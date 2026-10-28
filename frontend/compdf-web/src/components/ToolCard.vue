@@ -3,12 +3,11 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { toolI18nKey } from '@/config/i18n-keys';
 import type { ToolDef } from '@/config/convert-map';
+import { toolIcon } from '@/utils/tool-icons';
 const props = defineProps<{ tool: ToolDef }>();
 const { t } = useI18n();
 const icon = computed(() => {
-  // vite-svg-loader returns a component for `?component` imports
-  const mods = import.meta.glob('@/assets/icons/*.svg', { eager: true, query: '?component', import: 'default' });
-  return (mods as Record<string, any>)[`/src/assets/icons/${props.tool.icon}.svg`];
+  return toolIcon(props.tool.icon);
 });
 </script>
 

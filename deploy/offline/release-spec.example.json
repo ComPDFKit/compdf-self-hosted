@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "version": "1.1.0",
+  "channel": "stable",
+  "status": "active",
+  "minimumVersion": "1.0.0",
+  "minimumUpdaterVersion": "1.1.0",
+  "releasedAt": "2026-10-28T00:00:00Z",
+  "expiresAt": "2027-10-28T00:00:00Z",
+  "maintenanceRequired": true,
+  "infraUpgradeRequired": false,
+  "images": {
+    "app": {
+      "name": "compdfkit/compdf-app",
+      "tag": "1.0.0",
+      "digest": "sha256:<REAL_APP_IMAGE_DIGEST>"
+    },
+    "server": {
+      "name": "compdfkit/compdf-server",
+      "tag": "1.1.0",
+      "digest": "sha256:<REAL_SERVER_IMAGE_DIGEST>"
+    }
+  },
+  "migration": {
+    "from": "1.0.0",
+    "to": "1.1.0",
+    "required": true,
+    "artifact": {
+      "path": "migrations/1.0.0-to-1.1.0.sql",
+      "source": "../../migrations/1.0.0-to-1.1.0.sql"
+    }
+  },
+  "rollback": {
+    "application": true,
+    "database": false,
+    "requiresBackupRestore": false
+  },
+  "offlineImages": {
+    "app": {
+      "path": "images/compdf-app.docker.tar",
+      "source": "artifacts/compdf-app.docker.tar"
+    },
+    "server": {
+      "path": "images/compdf-server.docker.tar",
+      "source": "artifacts/compdf-server.docker.tar"
+    }
+  },
+  "releaseNotes": "Replace this text with approved release notes.",
+  "knownIssues": []
+}

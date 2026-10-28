@@ -1,0 +1,22 @@
+infra:
+  enabled: false
+
+external:
+  databaseHost: mysql.example.internal
+  databasePort: 3306
+  redisHost: redis.example.internal
+  redisPort: 6379
+  s3Endpoint: https://s3.example.internal
+
+ingress:
+  enabled: true
+  className: nginx
+  host: compdf.example.com
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 500m
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+
+# The current compdf-app image contract exposes only MYSQL_HOST, REDIS_URL,
+# and S3_ENDPOINT in this repository. Do not use this external-dependency file
+# in production until App authentication/TLS variables are confirmed.

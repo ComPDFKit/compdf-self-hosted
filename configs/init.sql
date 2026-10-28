@@ -1,8 +1,7 @@
--- configs/init.sql — ComPDF Self-Hosted v4.1.0 server schema
+-- configs/init.sql — ComPDF Self-Hosted v1.1.0 server schema
 --
--- Six tables owned by the server application:
---   users, api_keys, operation_logs, login_records, tasks, license_display,
---   system_settings.
+-- Server tables include users, api_keys, operation_logs, login_records, tasks,
+-- license_display, system_settings, schema_migrations and batch lifecycle tables.
 --
 -- Placeholder policy:
 --   Placeholders <bcrypt-of-default-password> / <generated-key-id> /
@@ -16,8 +15,18 @@
 -- Authoritative source of license limits/enforcement is the SDK signature check,
 -- NOT these tables: `license_display` is a display cache only.
 
-CREATE DATABASE IF NOT EXISTS compdfkit CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE compdfkit;
+-- The deployment layer creates the database and selects it through
+-- DATABASE_NAME. Keep this baseline database-agnostic so custom database names
+-- cannot accidentally initialize the default compdfkit database instead.
+
+-- Applied database schema versions. New installations and legacy deployments
+-- normalized by init-db.ts start at the 1.1.0 baseline; subsequent versions are
+-- recorded only by the dedicated migration runner.
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version    VARCHAR(32)  PRIMARY KEY,
+  checksum   VARCHAR(128) NOT NULL,
+  applied_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Admin account.
 CREATE TABLE IF NOT EXISTS users (
@@ -112,6 +121,108 @@ CREATE TABLE IF NOT EXISTS tasks (
   INDEX idx_apikey_created (api_key_id, created_at)
 );
 
+-- Batch file processing. Each source/result is stored on disk; the database
+-- stores lifecycle, lease and metadata so workers can resume after restart.
+CREATE TABLE IF NOT EXISTS batches (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  batch_id CHAR(36) NOT NULL,
+  api_key_id VARCHAR(32) NULL,
+  kind VARCHAR(16) NOT NULL,
+  op VARCHAR(64) NOT NULL,
+  target VARCHAR(64) NULL,
+  type VARCHAR(64) NULL,
+  operation VARCHAR(64) NULL,
+  request_json JSON NULL,
+  options_json JSON NULL,
+  output_passwords_ciphertext TEXT NULL,
+  status VARCHAR(24) NOT NULL DEFAULT 'draft',
+  total_count INT UNSIGNED NOT NULL DEFAULT 0,
+  queued_count INT UNSIGNED NOT NULL DEFAULT 0,
+  processing_count INT UNSIGNED NOT NULL DEFAULT 0,
+  success_count INT UNSIGNED NOT NULL DEFAULT 0,
+  failed_count INT UNSIGNED NOT NULL DEFAULT 0,
+  canceled_count INT UNSIGNED NOT NULL DEFAULT 0,
+  archive_path VARCHAR(512) NULL,
+  idempotency_key VARCHAR(128) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  started_at DATETIME NULL,
+  finished_at DATETIME NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_batches_batch_id (batch_id),
+  UNIQUE KEY uq_batches_api_idempotency (api_key_id, idempotency_key),
+  KEY idx_batches_api_created (api_key_id, created_at),
+  KEY idx_batches_status (status, updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS batch_items (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  item_id CHAR(36) NOT NULL,
+  batch_id CHAR(36) NOT NULL,
+  sequence_no INT UNSIGNED NOT NULL,
+  relative_path VARCHAR(1024) NULL,
+  source_name VARCHAR(512) NOT NULL,
+  source_path VARCHAR(512) NOT NULL,
+  source_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  source_sha256 CHAR(64) NULL,
+  source_password_ciphertext TEXT NULL,
+  status VARCHAR(24) NOT NULL DEFAULT 'uploaded',
+  attempt_count INT UNSIGNED NOT NULL DEFAULT 0,
+  lease_owner CHAR(36) NULL,
+  lease_until DATETIME NULL,
+  output_path VARCHAR(512) NULL,
+  output_name VARCHAR(512) NULL,
+  output_content_type VARCHAR(128) NULL,
+  output_size BIGINT UNSIGNED NULL,
+  failure_code VARCHAR(64) NULL,
+  failure_reason TEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  started_at DATETIME NULL,
+  finished_at DATETIME NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_batch_items_item_id (item_id),
+  UNIQUE KEY uq_batch_items_sequence (batch_id, sequence_no),
+  KEY idx_batch_items_queue (status, lease_until, updated_at),
+  KEY idx_batch_items_batch (batch_id, sequence_no),
+  CONSTRAINT fk_batch_items_batch FOREIGN KEY (batch_id) REFERENCES batches(batch_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS batch_item_outputs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  output_id CHAR(36) NOT NULL,
+  item_id CHAR(36) NOT NULL,
+  output_sequence INT UNSIGNED NOT NULL,
+  output_name VARCHAR(512) NOT NULL,
+  output_path VARCHAR(512) NOT NULL,
+  output_content_type VARCHAR(128) NOT NULL,
+  output_size BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_batch_outputs_output_id (output_id),
+  UNIQUE KEY uq_batch_outputs_sequence (item_id, output_sequence),
+  KEY idx_batch_outputs_item (item_id, output_sequence),
+  CONSTRAINT fk_batch_outputs_item FOREIGN KEY (item_id) REFERENCES batch_items(item_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS batch_attempts (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  attempt_id CHAR(36) NOT NULL,
+  item_id CHAR(36) NOT NULL,
+  attempt_no INT UNSIGNED NOT NULL,
+  worker_id CHAR(36) NOT NULL,
+  status VARCHAR(24) NOT NULL DEFAULT 'processing',
+  started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  finished_at DATETIME NULL,
+  failure_code VARCHAR(64) NULL,
+  failure_reason TEXT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_batch_attempts_attempt_id (attempt_id),
+  UNIQUE KEY uq_batch_attempts_number (item_id, attempt_no),
+  KEY idx_batch_attempts_item (item_id, started_at),
+  CONSTRAINT fk_batch_attempts_item FOREIGN KEY (item_id) REFERENCES batch_items(item_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- License display cache. The SDK signature check is authoritative.
 CREATE TABLE IF NOT EXISTS license_display (
   id           TINYINT PRIMARY KEY DEFAULT 1,
@@ -137,7 +248,7 @@ CREATE TABLE IF NOT EXISTS system_settings (
   theme_color  VARCHAR(20)  NOT NULL DEFAULT '#1976D2',
   dark_mode    TINYINT      NOT NULL DEFAULT 0,
   file_retention_days INT   NOT NULL DEFAULT 7,
-  -- v4.1.0 brand/marketing fields (nullable: NULL = "use frontend default"):
+  -- v1.1.0 brand/marketing fields (nullable: NULL = "use frontend default"):
   upgrade_banner_text VARCHAR(255) NULL,   -- ComPDF Web fixed upgrade-prompt banner text
   doc_url             VARCHAR(255) NULL,   -- private-deployment documentation URL
   contact_url         VARCHAR(255) NULL,   -- "contact technical expert" form URL
@@ -168,8 +279,8 @@ SET @c := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DA
 SET @s := IF(@c=0,'ALTER TABLE system_settings ADD COLUMN contact_url VARCHAR(255) NULL','DO 1'); PREPARE _p FROM @s; EXECUTE _p; DEALLOCATE PREPARE _p;
 SET @c := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='system_settings' AND COLUMN_NAME='announcements_json');
 SET @s := IF(@c=0,'ALTER TABLE system_settings ADD COLUMN announcements_json TEXT NULL','DO 1'); PREPARE _p FROM @s; EXECUTE _p; DEALLOCATE PREPARE _p;
--- v4.1.0 operation_logs: result_category + action + target (idempotent adds for
--- DBs already initialized with the v4.0 schema). CREATE TABLE IF NOT EXISTS is
+-- v1.1.0 operation_logs: result_category + action + target (idempotent adds for
+-- previously initialized databases). CREATE TABLE IF NOT EXISTS is
 -- a no-op when the table exists, so these columns never get added without this
 -- guard. MySQL 8 has no ADD COLUMN IF NOT EXISTS → INFORMATION_SCHEMA + PREPARE.
 SET @c := (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='operation_logs' AND COLUMN_NAME='result_category');

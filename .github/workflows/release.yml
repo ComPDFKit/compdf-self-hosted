@@ -1,0 +1,219 @@
+name: Publish release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing immutable release tag (for example v1.1.0)
+        required: true
+        type: string
+      minimum_version:
+        description: Oldest supported product version
+        default: '1.1.0'
+        required: true
+        type: string
+      database_schema_from:
+        description: Installed schema version (migration required when different)
+        default: '1.1.0'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-stable-release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    uses: ./.github/workflows/deployment-contracts.yml
+    permissions:
+      contents: read
+    with:
+      ref: refs/tags/${{ inputs.tag }}
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 45
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      MINIMUM_VERSION: ${{ inputs.minimum_version }}
+      DATABASE_SCHEMA_FROM: ${{ inputs.database_schema_from }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          fetch-depth: 0
+
+      - name: Validate immutable release identity and required credentials
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          RELEASE_SIGNING_PRIVATE_KEY: ${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}
+          RELEASE_SIGNING_KEY_ID: ${{ vars.RELEASE_SIGNING_KEY_ID }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          from pathlib import Path
+          tag = os.environ['RELEASE_TAG']
+          if not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
+              raise SystemExit('Select an existing vMAJOR.MINOR.PATCH tag')
+          subprocess.run(['git', 'rev-parse', '--verify', 'refs/tags/' + tag], check=True)
+          tagged_commit = subprocess.check_output(['git', 'rev-parse', 'refs/tags/' + tag + '^{commit}'], text=True).strip()
+          if tagged_commit != subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip():
+              raise SystemExit('Checkout does not match the immutable release tag')
+          metadata = json.loads(Path('release/version.json').read_text())
+          if tag != 'v' + metadata['productVersion']:
+              raise SystemExit('Tag does not match release/version.json')
+          for path in ['server/package.json', 'frontend/compdf-web/package.json']:
+              if json.loads(Path(path).read_text())['version'] != metadata['productVersion']:
+                  raise SystemExit('Package version mismatch: ' + path)
+          for key in ['DOCKERHUB_USERNAME', 'DOCKERHUB_TOKEN', 'RELEASE_SIGNING_PRIVATE_KEY', 'RELEASE_SIGNING_KEY_ID']:
+              if not os.environ.get(key, '').strip():
+                  raise SystemExit('Configure the release environment value: ' + key)
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('RELEASE_VERSION=' + metadata['productVersion'] + '\n')
+              output.write('UPDATER_VERSION=' + metadata['components']['updater'] + '\n')
+              output.write('APP_IMAGE=compdfkit/compdf-app:' + metadata['components']['app'] + '\n')
+          PY
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Reuse immutable images or reserve new version tags
+        id: images
+        run: |
+          set -euo pipefail
+          server_revision=$(git rev-parse HEAD)
+          updater_tree=$(git rev-parse HEAD:updater)
+          printf 'server_revision=%s\nupdater_tree=%s\n' "$server_revision" "$updater_tree" >> "$GITHUB_OUTPUT"
+          for component in server updater; do
+            if [ "$component" = server ]; then
+              version=$RELEASE_VERSION
+              label=org.opencontainers.image.revision
+              expected=$server_revision
+            else
+              version=$UPDATER_VERSION
+              label=com.compdf.source-tree
+              expected=$updater_tree
+            fi
+            image="compdfkit/compdf-$component:$version"
+            if docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}' > "$RUNNER_TEMP/$component-digest" 2> "$RUNNER_TEMP/registry-error"; then
+              digest=$(cat "$RUNNER_TEMP/$component-digest")
+              [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+              docker pull --platform linux/amd64 "${image%:*}@$digest" >/dev/null
+              actual=$(docker image inspect "${image%:*}@$digest" --format "{{index .Config.Labels \"$label\"}}")
+              if [ "$actual" != "$expected" ]; then
+                echo "Published $image has different or unidentified source. Choose a new component version."
+                exit 1
+              fi
+              printf '%s_digest=%s\n' "$component" "$digest" >> "$GITHUB_OUTPUT"
+            elif ! grep -Eqi 'manifest unknown|not found|does not exist' "$RUNNER_TEMP/registry-error"; then
+              cat "$RUNNER_TEMP/registry-error" >&2
+              exit 1
+            fi
+          done
+
+      - name: Build and push Server/UI
+        if: steps.images.outputs.server_digest == ''
+        id: server
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          target: production
+          platforms: linux/amd64
+          push: true
+          tags: compdfkit/compdf-server:${{ env.RELEASE_VERSION }}
+          build-args: COMPDF_VERSION=${{ env.RELEASE_VERSION }}
+          labels: org.opencontainers.image.revision=${{ steps.images.outputs.server_revision }}
+
+      - name: Build and push Updater
+        if: steps.images.outputs.updater_digest == ''
+        uses: docker/build-push-action@v6
+        with:
+          context: updater
+          file: updater/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: compdfkit/compdf-updater:${{ env.UPDATER_VERSION }}
+          build-args: UPDATER_VERSION=${{ env.UPDATER_VERSION }}
+          labels: com.compdf.source-tree=${{ steps.images.outputs.updater_tree }}
+
+      - name: Resolve the existing commercial App image
+        run: |
+          docker buildx imagetools inspect "$APP_IMAGE" --format '{{.Manifest.Digest}}' > "$RUNNER_TEMP/app-digest"
+          printf 'APP_DIGEST=%s\n' "$(cat "$RUNNER_TEMP/app-digest")" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: updater/go.sum
+
+      - name: Generate signed release metadata from real registry digests
+        env:
+          SERVER_DIGEST: ${{ steps.server.outputs.digest || steps.images.outputs.server_digest }}
+          RELEASE_SIGNING_PRIVATE_KEY: ${{ secrets.RELEASE_SIGNING_PRIVATE_KEY }}
+          RELEASE_SIGNING_KEY_ID: ${{ vars.RELEASE_SIGNING_KEY_ID }}
+        run: |
+          export RELEASE_SPEC_PATH="$RUNNER_TEMP/release-spec.json"
+          export SIGNING_KEY_PATH="$RUNNER_TEMP/release-signing-key"
+          trap 'rm -f "$SIGNING_KEY_PATH"' EXIT
+          python3 scripts/prepare-release.py
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          key = Path(os.environ['SIGNING_KEY_PATH'])
+          key.write_text(os.environ['RELEASE_SIGNING_PRIVATE_KEY'].strip() + '\n')
+          key.chmod(0o600)
+          PY
+          cd updater
+          go run ./cmd/compdf-release --spec "$RELEASE_SPEC_PATH" --private-key "$SIGNING_KEY_PATH" --key-id "$RELEASE_SIGNING_KEY_ID" --output "$RUNNER_TEMP/signed-release" --approve
+          rm -f "$SIGNING_KEY_PATH"
+
+      - name: Publish the verified channel to the updates branch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          if git ls-remote --exit-code --heads origin updates >/dev/null; then
+            git fetch origin updates
+            git worktree add "$RUNNER_TEMP/update-feed" origin/updates
+            export CURRENT_FEED="$RUNNER_TEMP/update-feed/stable/release.json"
+            python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          current = Path(os.environ['CURRENT_FEED'])
+          if current.exists():
+              published = tuple(map(int, json.loads(current.read_text())['version'].split('.')))
+              selected = tuple(map(int, os.environ['RELEASE_VERSION'].split('.')))
+              if selected < published:
+                  raise SystemExit('Stable channel cannot move to an older version')
+          PY
+          else
+            git worktree add --detach "$RUNNER_TEMP/update-feed"
+            git -C "$RUNNER_TEMP/update-feed" switch --orphan updates
+            git -C "$RUNNER_TEMP/update-feed" rm -rf --ignore-unmatch .
+          fi
+          mkdir -p "$RUNNER_TEMP/update-feed/stable"
+          cp -a "$RUNNER_TEMP/signed-release/." "$RUNNER_TEMP/update-feed/stable/"
+          git -C "$RUNNER_TEMP/update-feed" add stable
+          if ! git -C "$RUNNER_TEMP/update-feed" diff --cached --quiet; then
+            git -C "$RUNNER_TEMP/update-feed" commit -m "Publish $RELEASE_TAG signed update feed"
+            git -C "$RUNNER_TEMP/update-feed" push origin HEAD:updates
+          fi
+
+      - name: Create or refresh the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --verify-tag --title "ComPDF Self-Hosted $RELEASE_TAG" --generate-notes
+          fi
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/signed-release/release.json" "$RUNNER_TEMP/signed-release/release.json.sig" "$RUNNER_TEMP/signed-release/checksums.txt" --clobber

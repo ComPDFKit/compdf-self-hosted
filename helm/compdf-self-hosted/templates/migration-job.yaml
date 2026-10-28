@@ -1,0 +1,44 @@
+{{- if .Values.migration.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "compdf.fullname" . }}-migrate-{{ .Release.Revision }}
+  labels:
+    {{- include "compdf.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: {{ .Values.migration.backoffLimit }}
+  template:
+    metadata:
+      labels:
+        {{- include "compdf.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migration
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "compdf.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      containers:
+        - name: migration
+          image: {{ include "compdf.image" (list .Values.images.server .) | quote }}
+          imagePullPolicy: {{ .Values.images.server.pullPolicy }}
+          command: ["npm", "run", "migrate:db"]
+          env:
+            - name: COMPDF_DB_SCHEMA_VERSION
+              value: {{ .Values.server.databaseSchemaVersion | quote }}
+            - name: DATABASE_HOST
+              value: {{ include "compdf.databaseHost" . | quote }}
+            - name: DATABASE_PORT
+              value: {{ ternary .Values.infra.mysqlPort .Values.external.databasePort .Values.infra.enabled | quote }}
+            - name: DATABASE_NAME
+              value: {{ .Values.database.name | quote }}
+            - name: DATABASE_USER
+              value: {{ .Values.database.user | quote }}
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.passwordKey }}
+{{- end }}

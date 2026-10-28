@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "version": "4.2.0",
+  "channel": "stable",
+  "status": "active",
+  "minimumVersion": "4.1.0",
+  "minimumUpdaterVersion": "0.1.0",
+  "releasedAt": "2026-09-15T00:00:00Z",
+  "expiresAt": "2026-12-15T00:00:00Z",
+  "maintenanceRequired": true,
+  "infraUpgradeRequired": false,
+  "images": {
+    "app": {
+      "name": "compdfkit/compdf-app",
+      "tag": "4.2.0",
+      "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "server": {
+      "name": "compdfkit/compdf-server",
+      "tag": "4.2.0",
+      "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  },
+  "migration": {
+    "from": "4.1.0",
+    "to": "4.2.0",
+    "required": true,
+    "artifact": {
+      "path": "migrations/4.1.0-to-4.2.0.sql",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "size": 1024
+    }
+  },
+  "rollback": {
+    "application": true,
+    "database": false,
+    "requiresBackupRestore": false
+  },
+  "compose": {
+    "path": "compose.release.yml",
+    "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "size": 2048
+  },
+  "releaseNotes": "Adds the v4.2.0 application release.",
+  "knownIssues": []
+}

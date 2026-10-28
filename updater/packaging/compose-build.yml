@@ -1,0 +1,9 @@
+# Source-build override used by the root docker-compose.full.yml include.
+# Paths resolve from the first file in that include (the repository root).
+services:
+  compdf-updater:
+    build:
+      context: ./updater
+      dockerfile: Dockerfile
+      args:
+        UPDATER_VERSION: ${COMPDF_UPDATER_VERSION:-1.1.0}

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "productVersion": "1.1.0",
+  "releaseNotes": "Batch file processing, MCP integration, API key management, online License management, signed product updates, and PDF tool improvements.",
+  "databaseSchemaVersion": "1.1.0",
+  "components": {
+    "infra": "1.0.0",
+    "app": "1.0.0",
+    "server": "1.1.0",
+    "updater": "1.1.0"
+  }
+}

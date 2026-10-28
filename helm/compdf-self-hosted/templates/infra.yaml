@@ -1,0 +1,125 @@
+{{- if .Values.infra.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "compdf.fullname" . }}-infra
+  labels:
+    {{- include "compdf.labels" . | nindent 4 }}
+    app.kubernetes.io/component: infra
+spec:
+  selector:
+    {{- include "compdf.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: infra
+  ports:
+    - name: mysql
+      port: {{ .Values.infra.mysqlPort }}
+    - name: redis
+      port: {{ .Values.infra.redisPort }}
+    - name: s3
+      port: {{ .Values.infra.s3Port }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "compdf.fullname" . }}-infra
+  labels:
+    {{- include "compdf.labels" . | nindent 4 }}
+    app.kubernetes.io/component: infra
+spec:
+  serviceName: {{ include "compdf.fullname" . }}-infra
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "compdf.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: infra
+  template:
+    metadata:
+      labels:
+        {{- include "compdf.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: infra
+    spec:
+      serviceAccountName: {{ include "compdf.serviceAccountName" . }}
+      automountServiceAccountToken: false
+      securityContext:
+        seccompProfile:
+          type: {{ .Values.infra.securityContext.seccompProfile.type }}
+      containers:
+        - name: infra
+          image: {{ include "compdf.image" (list .Values.images.infra .) | quote }}
+          imagePullPolicy: {{ .Values.images.infra.pullPolicy }}
+          ports:
+            - name: mysql
+              containerPort: {{ .Values.infra.mysqlPort }}
+            - name: redis
+              containerPort: {{ .Values.infra.redisPort }}
+            - name: s3
+              containerPort: {{ .Values.infra.s3Port }}
+          env:
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.infra.objectStorage.existingSecret }}
+                  key: {{ .Values.infra.objectStorage.accessKeyKey }}
+            - name: RUSTFS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.infra.objectStorage.existingSecret }}
+                  key: {{ .Values.infra.objectStorage.secretKeyKey }}
+          startupProbe:
+            tcpSocket:
+              port: mysql
+            periodSeconds: 10
+            failureThreshold: 18
+          readinessProbe:
+            tcpSocket:
+              port: mysql
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.infra.resources | nindent 12 }}
+          volumeMounts:
+            - name: mysql
+              mountPath: /var/lib/mysql
+            - name: redis
+              mountPath: /data/redis
+            - name: object-storage
+              mountPath: /data
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      affinity:
+        {{- toYaml .Values.affinity | nindent 8 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: mysql
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if .Values.infra.mysql.storageClassName }}
+        storageClassName: {{ .Values.infra.mysql.storageClassName }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.infra.mysql.size }}
+    - metadata:
+        name: redis
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if .Values.infra.redis.storageClassName }}
+        storageClassName: {{ .Values.infra.redis.storageClassName }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.infra.redis.size }}
+    - metadata:
+        name: object-storage
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- if .Values.infra.objectStorage.storageClassName }}
+        storageClassName: {{ .Values.infra.objectStorage.storageClassName }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.infra.objectStorage.size }}
+{{- end }}

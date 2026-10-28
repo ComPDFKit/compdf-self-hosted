@@ -1,0 +1,160 @@
+nameOverride: ""
+fullnameOverride: ""
+
+images:
+  infra:
+    repository: compdfkit/compdf-infra
+    tag: "1.0.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  app:
+    repository: compdfkit/compdf-app
+    tag: "1.0.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+  server:
+    repository: compdfkit/compdf-server
+    tag: "1.1.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+license:
+  existingSecret: compdf-license
+  key: license
+
+database:
+  existingSecret: compdf-database
+  passwordKey: password
+  name: compdfkit
+  user: compdfkit
+
+server:
+  replicas: 1
+  port: 8080
+  corsOrigins: "https://compdf.example.com"
+  publicBaseUrl: "https://compdf.example.com"
+  mcp:
+    enabled: true
+    allowedHosts: ""
+    allowedOrigins: ""
+    maxInlineFileBytes: 4194304
+  productVersion: "1.1.0"
+  databaseSchemaVersion: "1.1.0"
+  storage:
+    size: 20Gi
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+app:
+  replicas: 1
+  pdfData:
+    size: 100Gi
+    storageClassName: ""
+  output:
+    size: 100Gi
+    storageClassName: ""
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "8"
+      memory: 16Gi
+
+infra:
+  enabled: true
+  mysqlPort: 3306
+  redisPort: 6379
+  s3Port: 9000
+  mysql:
+    size: 50Gi
+    storageClassName: ""
+  redis:
+    size: 10Gi
+    storageClassName: ""
+  objectStorage:
+    size: 100Gi
+    storageClassName: ""
+    existingSecret: compdf-object-storage
+    accessKeyKey: access-key
+    secretKeyKey: secret-key
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "4"
+      memory: 3Gi
+  securityContext:
+    seccompProfile:
+      type: Unconfined
+
+external:
+  databaseHost: ""
+  databasePort: 3306
+  redisHost: ""
+  redisPort: 6379
+  s3Endpoint: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: compdf.example.com
+  path: /
+  pathType: Prefix
+  tls:
+    enabled: true
+    secretName: compdf-tls
+
+settings:
+  existingConfigMap: ""
+  content: |
+    branding:
+      system_name: ComPDF Self-Hosted
+    updates:
+      enabled: false
+      check_url: ""
+
+serviceAccount:
+  create: true
+  name: ""
+
+podSecurityContext:
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+
+networkPolicy:
+  enabled: true
+  ingressNamespaceSelector:
+    kubernetes.io/metadata.name: ingress-nginx
+
+pdb:
+  enabled: false
+  minAvailable: 1
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+
+migration:
+  enabled: false
+  backoffLimit: 1
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

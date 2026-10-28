@@ -1,0 +1,6 @@
+services:
+  compdf-app:
+    ports:
+      - "127.0.0.1:${COMPDF_CONVERSION_DEBUG_PORT:-7000}:7000"
+      - "127.0.0.1:${COMPDF_PDF_SDK_DEBUG_PORT:-7001}:7001"
+      - "127.0.0.1:${COMPDF_APP_DEBUG_PORT:-9903}:9903"

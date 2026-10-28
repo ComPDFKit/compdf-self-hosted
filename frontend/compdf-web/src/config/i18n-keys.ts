@@ -66,6 +66,10 @@ const SLUG_TO_TOOL_KEY: Record<string, string> = {
   'compress': 'compress',
   'add-watermark': 'addWatermark',
   'remove-watermark': 'removeWatermark',
+  'add-headers-footers': 'addHeadersFooters',
+  'remove-headers-footers': 'removeHeadersFooters',
+  'add-bates': 'addBates',
+  'remove-bates': 'removeBates',
   'encrypt': 'encrypt',
   'decrypt': 'decrypt',
 };

@@ -39,7 +39,11 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/layouts/DashboardLayout.vue'),
     children: [
       { path: '', name: 'overview', component: () => import('@/views/Overview.vue') },
+      { path: 'license', name: 'license', component: () => import('@/views/LicenseManagement.vue') },
+      { path: 'api-keys', name: 'api-keys', component: () => import('@/views/ApiKeysManagement.vue') },
+      { path: 'mcp', name: 'mcp', component: () => import('@/views/McpServer.vue') },
       { path: 'logs', name: 'logs', component: () => import('@/views/Logs.vue') },
+      { path: 'updates', name: 'updates', component: () => import('@/views/Updates.vue') },
       { path: 'account', name: 'account', component: () => import('@/views/Account.vue') },
       { path: 'settings', name: 'settings', component: () => import('@/views/Settings.vue') },
     ],

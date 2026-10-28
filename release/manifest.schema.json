@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://www.compdf.com/schemas/self-hosted/release-manifest-v1.json",
+  "title": "ComPDF Self-Hosted release manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "version",
+    "channel",
+    "status",
+    "minimumVersion",
+    "minimumUpdaterVersion",
+    "releasedAt",
+    "expiresAt",
+    "maintenanceRequired",
+    "infraUpgradeRequired",
+    "images",
+    "migration",
+    "rollback",
+    "releaseNotes",
+    "knownIssues"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "version": { "$ref": "#/$defs/semver" },
+    "channel": { "enum": ["stable", "beta", "security"] },
+    "status": { "enum": ["active", "paused", "withdrawn"] },
+    "statusReason": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "minimumVersion": { "$ref": "#/$defs/semver" },
+    "minimumUpdaterVersion": { "$ref": "#/$defs/semver" },
+    "releasedAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "maintenanceRequired": { "type": "boolean" },
+    "infraUpgradeRequired": { "type": "boolean" },
+    "images": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app", "server"],
+      "properties": {
+        "app": { "$ref": "#/$defs/image" },
+        "server": { "$ref": "#/$defs/image" }
+      }
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "required"],
+      "properties": {
+        "from": { "$ref": "#/$defs/semver" },
+        "to": { "$ref": "#/$defs/semver" },
+        "required": { "type": "boolean" },
+        "artifact": { "$ref": "#/$defs/artifact" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "required": { "const": true } }, "required": ["required"] },
+          "then": {
+            "properties": { "artifact": { "$ref": "#/$defs/artifact" } },
+            "required": ["artifact"]
+          }
+        }
+      ]
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["application", "database", "requiresBackupRestore"],
+      "properties": {
+        "application": { "type": "boolean" },
+        "database": { "type": "boolean" },
+        "requiresBackupRestore": { "type": "boolean" }
+      }
+    },
+    "compose": { "$ref": "#/$defs/artifact" },
+    "checksums": { "$ref": "#/$defs/artifact" },
+    "offlineImages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["app", "server"],
+      "properties": {
+        "app": { "$ref": "#/$defs/artifact" },
+        "server": { "$ref": "#/$defs/artifact" }
+      }
+    },
+    "releaseNotes": { "type": "string", "minLength": 1, "maxLength": 20000 },
+    "knownIssues": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1, "maxLength": 2000 },
+      "maxItems": 100
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "enum": ["paused", "withdrawn"] } }, "required": ["status"] },
+      "then": {
+        "properties": { "statusReason": { "type": "string", "minLength": 1, "maxLength": 2000 } },
+        "required": ["statusReason"]
+      }
+    }
+  ],
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "tag", "digest"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "tag": { "$ref": "#/$defs/semver" },
+        "digest": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "size"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$", "maxLength": 512 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "size": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

@@ -1,20 +1,23 @@
 /**
- * LicenseTokenService — license token storage + display decoding.
+ * LicenseTokenService — license token storage + runtime XML display decoding.
  *
  * The server NEVER interprets, validates, or enforces license limits. This
- * service only reads the configured token and decodes the payload for display
- * in the ComPDF Web — without verifying the signature.
+ * The raw Server JWT remains available for upstream authentication and legacy
+ * upload compatibility. Dashboard display status comes from the mounted SDK
+ * XML license's starttime/endtime fields.
  *
  * No limit fields here. No watermark/concurrency/page logic. Ever.
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { readFileSync, statSync } from 'fs';
-import { join } from 'path';
+import { existsSync, readFileSync, statSync } from 'fs';
+import { dirname, isAbsolute, join } from 'path';
 
 export interface LicenseDisplay {
   sub?: string;
-  exp?: number;
+  fileName?: string;
+  startTime?: string;
+  endTime?: string;
   scope?: unknown;
   limits?: unknown;
   status: 'valid' | 'expiring' | 'expired' | 'inactive';
@@ -31,8 +34,7 @@ export class LicenseTokenService {
   private readonly tokenPath: string;
   private readonly rawTokenEnv: string;
 
-  // File-read cache (1s mtime TTL) so a hot-swapped license.jwt is picked up
-  // without re-reading the file on every upstream call.
+  // File-read cache for legacy raw license.jwt access.
   private cachedFileToken: string | null = null;
   private cachedFileMtimeMs = 0;
   private cachedAtMs = 0;
@@ -56,33 +58,38 @@ export class LicenseTokenService {
   }
 
   /**
-   * Decode the JWT payload (NO signature verification) for UI display.
-   * `status` is inferred from `exp` only — never from any limit field.
-   * Tolerates malformed/placeholder tokens (returns status 'inactive').
+   * Read the runtime XML license for UI display. The XML is the source of
+   * truth for the license period; the server JWT is not used for status.
    */
   decodeForDisplay(): LicenseDisplay {
-    const token = this.getRawToken();
-    if (!token) {
+    const runtimePath = this.resolveRuntimeLicensePath();
+    if (!existsSync(runtimePath)) return { status: 'inactive', present: false };
+
+    let xml = '';
+    try {
+      xml = readFileSync(runtimePath, 'utf8');
+    } catch (err) {
+      this.logger.debug(`runtime license file unreadable (${runtimePath}): ${(err as Error).message}`);
       return { status: 'inactive', present: false };
     }
-    const payload = this.decodePayload(token);
-    if (!payload) {
-      return { status: 'inactive', present: true };
-    }
+
+    const startTime = readLicenseDate(xml, 'starttime');
+    const endTime = readLicenseDate(xml, 'endtime');
+    const start = startTime ? parseLicenseDate(startTime) : undefined;
+    const end = endTime ? parseLicenseDate(endTime) : undefined;
     const now = Math.floor(Date.now() / 1000);
-    const exp = typeof payload.exp === 'number' ? payload.exp : undefined;
     let status: LicenseDisplay['status'] = 'inactive';
-    if (exp !== undefined) {
-      if (exp <= 0) status = 'expired'; // placeholder token (exp:0)
-      else if (exp <= now) status = 'expired';
-      else if (exp - now <= EXPIRING_WINDOW_SECONDS) status = 'expiring';
+    if (start !== undefined && end !== undefined) {
+      if (end <= now) status = 'expired';
+      else if (start > now) status = 'inactive';
+      else if (end - now <= EXPIRING_WINDOW_SECONDS) status = 'expiring';
       else status = 'valid';
     }
     return {
-      sub: typeof payload.sub === 'string' ? payload.sub : undefined,
-      exp,
-      scope: payload.scope,
-      limits: payload.limits,
+      sub: readLicenseValue(xml, 'id'),
+      fileName: 'license.xml',
+      startTime,
+      endTime,
       status,
       present: true,
     };
@@ -130,8 +137,13 @@ export class LicenseTokenService {
 
   /** Resolve a relative token path against CWD (helper for license upload). */
   resolveTokenPath(): string {
-    if (this.tokenPath.startsWith('/')) return this.tokenPath;
+    if (isAbsolute(this.tokenPath)) return this.tokenPath;
     return join(process.cwd(), this.tokenPath);
+  }
+
+  /** The SDK XML license mounted beside the Server JWT in self-hosted deployments. */
+  resolveRuntimeLicensePath(): string {
+    return join(dirname(this.resolveTokenPath()), 'app-license', 'license.xml');
   }
 
   /** Clear the file-read cache (called after an online token upload). */
@@ -140,4 +152,22 @@ export class LicenseTokenService {
     this.cachedFileMtimeMs = 0;
     this.cachedAtMs = 0;
   }
+}
+
+const LICENSE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function readLicenseValue(xml: string, tag: string): string | undefined {
+  const match = xml.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([^<]*)</${tag}>`, 'i'));
+  const value = match?.[1]?.trim();
+  return value || undefined;
+}
+
+function readLicenseDate(xml: string, tag: string): string | undefined {
+  const value = readLicenseValue(xml, tag);
+  return value && LICENSE_DATE_PATTERN.test(value) ? value : undefined;
+}
+
+function parseLicenseDate(value: string): number | undefined {
+  const timestamp = Date.parse(`${value}T00:00:00Z`);
+  return Number.isFinite(timestamp) ? Math.floor(timestamp / 1000) : undefined;
 }

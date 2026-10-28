@@ -58,7 +58,10 @@ export class SettingsFileSyncService implements OnModuleInit {
   private readonly logger = new Logger(SettingsFileSyncService.name);
   private readonly storageDir: string;
   /** In-memory copy of the `updates` section (not stored in DB — runtime config). */
-  private updatesConfig: { enabled: boolean; checkUrl: string | null } = { enabled: true, checkUrl: null };
+  private updatesConfig: { enabled: boolean; checkUrl: string | null } = {
+    enabled: true,
+    checkUrl: defaultUpdateManifestUrl(),
+  };
 
   constructor(
     private readonly mysql: MysqlClient,
@@ -101,7 +104,7 @@ export class SettingsFileSyncService implements OnModuleInit {
     if (parsed?.updates) {
       this.updatesConfig = {
         enabled: parsed.updates.enabled !== false,
-        checkUrl: parsed.updates.check_url?.trim() || null,
+        checkUrl: parsed.updates.check_url?.trim() || defaultUpdateManifestUrl(),
       };
     }
 
@@ -147,4 +150,11 @@ export class SettingsFileSyncService implements OnModuleInit {
     }
     return true;
   }
+}
+
+function defaultUpdateManifestUrl(): string {
+  const base = process.env.COMPDF_UPDATE_BASE_URL?.trim()
+    || 'https://raw.githubusercontent.com/ComPDFKit/compdf-self-hosted/updates/';
+  const channel = process.env.COMPDF_UPDATE_CHANNEL?.trim() || 'stable';
+  return `${base.replace(/\/+$/, '')}/${channel}/release.json`;
 }

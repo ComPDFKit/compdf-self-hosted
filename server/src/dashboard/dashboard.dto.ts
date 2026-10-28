@@ -7,7 +7,7 @@
  */
 import { Type } from 'class-transformer';
 import {
-  IsBoolean, IsIn, IsInt, IsOptional, IsString, MaxLength, Min, Max, MinLength,
+  IsBoolean, IsIn, IsInt, IsOptional, IsString, Matches, MaxLength, Min, Max, MinLength,
 } from 'class-validator';
 
 // --- Request DTOs ---
@@ -66,6 +66,14 @@ export class UpdateAccountDto {
   username?: string;
 }
 
+export class ApiKeyActionDto {
+  @IsString() @MinLength(1) @MaxLength(32)
+  keyId!: string;
+
+  @IsIn(['view', 'copy'])
+  action!: 'view' | 'copy';
+}
+
 export class ClientErrorDto {
   @IsString() @MinLength(1) @MaxLength(1000)
   message!: string;
@@ -98,6 +106,65 @@ export class UpdateSettingsDto {
   @IsOptional() @IsString() @MaxLength(255)
   contactUrl?: string;
 
+}
+
+export class UpdateRuntimeModeDto {
+  @IsIn(['normal', 'draining', 'maintenance'])
+  mode!: 'normal' | 'draining' | 'maintenance';
+
+  @IsString() @Matches(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/)
+  requestId!: string;
+
+  @IsString() @MinLength(1) @MaxLength(1000)
+  reason!: string;
+}
+
+export class UpdateCheckDto {
+  @IsString() @Matches(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/)
+  currentVersion!: string;
+}
+
+export class UpdateJobDto extends UpdateCheckDto {
+  @IsString() @Matches(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/)
+  targetVersion!: string;
+
+  @IsString() @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{0,160}$/)
+  requestId!: string;
+}
+
+export class UpdateBackupDto extends UpdateCheckDto {
+  @IsString() @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{0,160}$/)
+  requestId!: string;
+
+  @IsBoolean()
+  approve!: boolean;
+
+  @IsBoolean()
+  maintenanceConfirmed!: boolean;
+}
+
+export class UpdateApplyDto extends UpdateJobDto {
+  @IsBoolean()
+  approve!: boolean;
+
+  @IsBoolean()
+  maintenanceConfirmed!: boolean;
+
+  @IsOptional() @IsBoolean()
+  offlineRiskConfirmed?: boolean;
+}
+
+export class UpdateRollbackDto {
+  @IsString() @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{0,160}$/)
+  requestId!: string;
+
+  @IsBoolean()
+  approve!: boolean;
+}
+
+export class UpdateCancelDto {
+  @IsString() @Matches(/^[A-Za-z0-9][A-Za-z0-9._-]{0,160}$/)
+  requestId!: string;
 }
 
 // --- Response shapes ---
@@ -175,4 +242,5 @@ export interface VersionInfo {
   releasedAt: string | null;
   changelogUrl: string | null;
   image: string | null;
+  releaseNotes: string | null;
 }
