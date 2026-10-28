@@ -139,16 +139,22 @@ func Build(specPath, privateKeyPath, keyID, outputDirectory, offlinePackage stri
 			payload = append(payload, artifact)
 		}
 	}
-	checksumsBytes := renderChecksums(payload)
-	checksumsPath := filepath.Join(temporary, "checksums.txt")
-	if err := os.WriteFile(checksumsPath, checksumsBytes, 0o600); err != nil {
-		return Result{}, err
+	// Image-only online releases have no downloadable payload artifacts. In
+	// that case omit checksums.txt instead of creating an empty artifact, which
+	// cannot satisfy the release artifact contract. Offline or migration
+	// releases still receive a checksums file covering every payload artifact.
+	if len(payload) > 0 {
+		checksumsBytes := renderChecksums(payload)
+		checksumsPath := filepath.Join(temporary, "checksums.txt")
+		if err := os.WriteFile(checksumsPath, checksumsBytes, 0o600); err != nil {
+			return Result{}, err
+		}
+		checksumsArtifact, err := describe("checksums.txt", checksumsPath)
+		if err != nil {
+			return Result{}, err
+		}
+		manifest.Checksums = &checksumsArtifact
 	}
-	checksumsArtifact, err := describe("checksums.txt", checksumsPath)
-	if err != nil {
-		return Result{}, err
-	}
-	manifest.Checksums = &checksumsArtifact
 	if err := manifest.Validate(); err != nil {
 		return Result{}, fmt.Errorf("generated release manifest is invalid: %w", err)
 	}

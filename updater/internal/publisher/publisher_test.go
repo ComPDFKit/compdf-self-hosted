@@ -85,6 +85,46 @@ func TestBuildRefusesToOverwritePublishedVersion(t *testing.T) {
 	}
 }
 
+func TestBuildAllowsImageOnlyOnlineRelease(t *testing.T) {
+	root := t.TempDir()
+	publicKey, privateKey, _ := ed25519.GenerateKey(rand.Reader)
+	keyPath := filepath.Join(root, "release.key")
+	if err := os.WriteFile(keyPath, []byte(base64.StdEncoding.EncodeToString(privateKey)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	spec := Spec{
+		SchemaVersion: 1, Version: "1.1.0", Channel: "stable", MinimumVersion: "1.1.0", MinimumUpdaterVersion: "1.1.0",
+		ReleasedAt: now.Add(-time.Hour), ExpiresAt: now.Add(24 * time.Hour),
+		Images: map[string]release.Image{
+			"app":    {Name: "compdfkit/compdf-app", Tag: "1.0.0", Digest: "sha256:" + strings.Repeat("a", 64)},
+			"server": {Name: "compdfkit/compdf-server", Tag: "1.1.0", Digest: "sha256:" + strings.Repeat("b", 64)},
+		},
+		Migration: MigrationInput{From: "1.1.0", To: "1.1.0"},
+		Rollback:  release.Rollback{Application: true},
+		ReleaseNotes: "Image-only publisher test", KnownIssues: []string{},
+	}
+	specBytes, _ := json.Marshal(spec)
+	specPath := filepath.Join(root, "release-spec.json")
+	if err := os.WriteFile(specPath, specBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(root, "published", "1.1.0")
+	result, err := Build(specPath, keyPath, "release-test", output, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Manifest.Checksums != nil {
+		t.Fatal("image-only online release should not publish an empty checksums artifact")
+	}
+	if err := release.VerifySignature(result.ManifestBytes, mustSignature(t, result.SignatureBytes), map[string]ed25519.PublicKey{"release-test": publicKey}); err != nil {
+		t.Fatal(err)
+	}
+	if err := release.VerifyBundle(output, result.Manifest, result.ManifestBytes, result.SignatureBytes); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func mustSignature(t *testing.T, data []byte) release.Signature {
 	t.Helper()
 	signature, err := release.ParseSignature(data)
