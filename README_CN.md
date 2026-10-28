@@ -140,9 +140,10 @@ Compose 项目名并保留持久化卷。基础 Compose 发布 8080 端口，可
 
 更新源缺失、无法访问或清单过期时，不会确认为检查成功。安装前由 Updater 独立验证签名。
 
-Dashboard 安装产品更新和在线更新运行 XML License，需要独立 Updater。在 `.env`
-配置发布方提供的 `COMPDF_UPDATE_KEY_ID` 与 Base64 Ed25519 公钥
-`COMPDF_UPDATE_PUBLIC_KEY`。默认更新源为本仓库 `updates` 分支。在完整仓库中使用已发布镜像启动：
+Dashboard 安装产品更新和在线更新运行 XML License，需要独立 Updater。复制
+`.env.example` 为 `.env` 后，模板已包含当前 stable 更新源的
+`COMPDF_UPDATE_KEY_ID` 和 Base64 Ed25519 公钥 `COMPDF_UPDATE_PUBLIC_KEY`。
+只有签名密钥更换时才需要修改。默认更新源为本仓库 `updates` 分支。在完整仓库中使用已发布镜像启动：
 
 ```sh
 docker compose -f docker-compose.yml -f docker-compose.updater-container.yml up -d --wait --wait-timeout 600

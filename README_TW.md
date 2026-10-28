@@ -140,9 +140,10 @@ digest 的 App／Server 映像，備份資料、執行宣告的資料庫遷移�
 
 更新來源缺失、無法存取或清單過期時，不會確認為檢查成功。安裝前由 Updater 獨立驗證簽章。
 
-Dashboard 安裝產品更新與線上更新執行 XML License，需要獨立 Updater。在 `.env`
-設定發佈方提供的 `COMPDF_UPDATE_KEY_ID` 與 Base64 Ed25519 公鑰
-`COMPDF_UPDATE_PUBLIC_KEY`。預設更新來源為本儲存庫 `updates` 分支。在完整儲存庫中使用已發佈映像啟動：
+Dashboard 安裝產品更新與線上更新執行 XML License，需要獨立 Updater。將
+`.env.example` 複製為 `.env` 後，範本已包含目前 stable 更新來源的
+`COMPDF_UPDATE_KEY_ID` 與 Base64 Ed25519 公鑰 `COMPDF_UPDATE_PUBLIC_KEY`。
+只有簽章金鑰更換時才需要修改。預設更新來源為本儲存庫 `updates` 分支。在完整儲存庫中使用已發佈映像啟動：
 
 ```sh
 docker compose -f docker-compose.yml -f docker-compose.updater-container.yml up -d --wait --wait-timeout 600

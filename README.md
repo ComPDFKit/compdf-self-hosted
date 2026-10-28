@@ -159,9 +159,11 @@ Missing/unreachable or expired metadata does not confirm a successful
 latest-version check. Updater independently verifies signatures before installation.
 
 Dashboard product installation and online runtime XML License updates need the
-independent Updater. Set publisher-provided `COMPDF_UPDATE_KEY_ID` and Base64
-Ed25519 `COMPDF_UPDATE_PUBLIC_KEY` in `.env`. The default feed is this repository's
-`updates` branch. From a complete checkout, start published images with:
+independent Updater. Copy `.env.example` to `.env`; it already contains the
+current stable feed's `COMPDF_UPDATE_KEY_ID` and Base64 Ed25519
+`COMPDF_UPDATE_PUBLIC_KEY`. Replace them only when the signing key changes. The
+default feed is this repository's `updates` branch. From a complete checkout, start
+published images with:
 
 ```sh
 docker compose -f docker-compose.yml -f docker-compose.updater-container.yml up -d --wait --wait-timeout 600
