@@ -1,29 +1,87 @@
 ![ComPDF Solutions](images/ComPDF-Comprehensive%20PDF%20Solutions.png)
 
-[English](README.md) | [简体中文](README_CN.md) | [繁體中文](README_TW.md)
+[English](README.md) | [繁體中文](README_TW.md) | [简体中文](README_CN.md)
 
-# ComPDF Self-Hosted — 自託管 PDF 平台
+# ComPDF Self-Hosted — 開源 PDF 編輯器與 PDF 轉檔工具
 
-在自己的環境中部署 PDF 編輯、文件轉換與批次處理服務，提供 Web 工具中心、
-Dashboard 管理後台、REST API 和 MCP 串接。
+[ComPDF Self-Hosted](https://www.compdf.com/self-hosted-deployment?utm_source=github_ai_selfhosted_oldopen_tw&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_tw&ref_platform_id=github_compdf_tw) 是 KDAN 生態系的一部分，提供可私有化部署的 PDF 編輯與轉檔功能，幫助團隊在私有 Docker 環境中安全處理 PDF、Office 文件與圖片。
+
+> * 如果您覺得 ComPDF Self-Hosted 實用，請考慮在 GitHub 上為我們點亮一顆 ⭐ **Star**，支持我們持續成長與改進。
+> * 有任何問題或想法？歡迎前往 [Discussions](https://github.com/ComPDFKit/compdf-self-hosted/discussions) 與我們交流。
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License"></a>
+  <a href="#quick-start"><img src="https://img.shields.io/badge/docker-supported-blue" alt="Docker"></a>
+  <a href="https://github.com/ComPDFKit/compdf-self-hosted"><img src="https://img.shields.io/github/stars/ComPDFKit/compdf-self-hosted" alt="GitHub Stars"></a>
+  <a href="https://github.com/ComPDFKit/compdf-self-hosted/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen" alt="PRs Welcome"></a>
+</p>
+
+<p align="center">
+  <a href="#features"><b>功能</b></a> •
+  <a href="#quick-start"><b>快速開始</b></a> •
+  <a href="#architecture"><b>系統架構</b></a> •
+  <a href="#upgrade-to-enterprise"><b>升級至企業版</b></a> •
+  <a href="#documentation"><b>技術文件</b></a> •
+  <a href="#support"><b>支援</b></a> •
+  <a href="#license"><b>授權條款</b></a>
+</p>
+
+## 為什麼選擇 ComPDF Self-Hosted？
+
+不同於需要深度整合的傳統 SDK，ComPDF Self-Hosted 是一套可直接部署的開源 PDF 處理平台。平台整合 PDF 編輯、文件轉檔與圖片轉檔功能，涵蓋完整的文件與圖片處理需求，讓企業能快速建置自主可控的文件處理中心。
+
+### 主要優勢
+
+* 支援 Docker Compose 部署
+* 完整的 PDF 工具中心——編輯、轉檔、合併、分割
+* 支援 API 金鑰管理與授權管理
+* 支援私有化部署，採用符合企業級需求的系統架構
+* 提供商業支援與專屬技術協助
+
+無論您正在建置內部文件平台、文件自動化流程或企業 PDF 服務，ComPDF Self-Hosted 都能讓您在幾分鐘內快速上手。
+
+<a id="features"></a>
 
 ## 功能
 
-- PDF 工具：合併、分割、旋轉、插入／刪除／擷取頁面、壓縮、浮水印、加密／解密、
-  頁首／頁尾與貝茲編碼。
-- 文件與圖片轉換：PDF、Office、HTML、文字及支援的圖片格式。實際能力取決於
-  App 映像與 SDK 授權。
-- 批次檔案上傳、個別檔案密碼、循序處理、狀態查詢、失敗重試與 ZIP 下載。
-- Dashboard：用量概覽、日誌、API 金鑰、帳號與品牌設定、License 管理及產品更新。
-- MCP：以 API Key 驗證的 Streamable HTTP 工具，支援操作探索與批次管理。
+![Tools](images/tools.png)
 
-![PDF 工具](images/tools.png)
+### 1. PDF 工具中心
+
+ComPDF Self-Hosted 提供可直接在瀏覽器中使用的**開源 PDF 編輯器、開源 PDF 轉檔工具與開源圖片轉檔**工具中心。
+
+| 類別 | 功能 |
+| --- | --- |
+| PDF 編輯 | 合併、分割、旋轉、插入／刪除／擷取頁面、壓縮、新增／移除浮水印、加密／解密、新增／移除頁首／頁尾及貝茲編碼 |
+| PDF 轉其他格式 | Word、Excel、PowerPoint、圖片、HTML、TXT、CSV、RTF、JSON、可搜尋 PDF、OFD、Markdown 與 PDF/A |
+| 其他格式轉 PDF | Word、Excel、PowerPoint、HTML、TXT、CSV、RTF 與 PNG |
+| 圖片轉其他格式 | Word、Excel、PowerPoint、HTML、CSV、TXT、RTF、JSON 與 PDF |
+
+可用格式與處理限制取決於部署的 App 映像和 SDK 授權。儲存庫程式碼開源；商業 PDF／Conversion SDK 與有效執行授權另行提供。
+
+### 2. Dashboard 管理控制台
+
+ComPDF Self-Hosted 提供統一的管理控制台，用於查看 API Key、API 呼叫情況與 License 狀態，並支援操作紀錄稽核、帳號管理及系統基本設定等核心功能。
 
 ![Dashboard](images/dashboard.png)
 
-## 安裝部署
+* 總覽面板：顯示 API Key 詳細資訊、API 呼叫資料、授權（License）範圍及狀態等資訊。
+* 操作日誌：追蹤、搜尋，並匯出所有操作日誌
+* 帳號管理：設定使用者名稱與密碼
+* 系統設定：設定系統名稱、標誌與主題色
+* License 管理與產品更新：檢視執行授權狀態，管理經管理員確認的產品更新。
 
-以下三種部署方式皆受支援。建議至少 **32 GB 記憶體**，並預留映像、資料與備份空間。
+### 3. 批次處理與 API 串接
+
+- 批次檔案上傳、個別檔案密碼、循序處理、狀態查詢、失敗重試與 ZIP 下載。
+- REST API：串接內部系統與文件自動化流程。
+- MCP：以 API Key 驗證的 Streamable HTTP 工具，支援操作探索與批次管理。
+
+<a id="quick-start"></a>
+
+## 快速開始
+
+以下三種部署方式皆受支援。請預留映像、資料與備份空間。
 預設 Infra/App 映像適用於 `linux/amd64`。Docker 方式需要 Docker Engine 或 Linux
 容器模式的 Docker Desktop，以及支援 `up --wait --wait-timeout` 的 Compose v2。
 
@@ -140,23 +198,22 @@ digest 的 App／Server 映像，備份資料、執行宣告的資料庫遷移�
 
 更新來源缺失、無法存取或清單過期時，不會確認為檢查成功。安裝前由 Updater 獨立驗證簽章。
 
-Dashboard 安裝產品更新與線上更新執行 XML License，需要獨立 Updater。將
+Dashboard 安裝產品更新與線上更新執行 XML License，使用預設 Compose 檔案中包含的 Updater。將
 `.env.example` 複製為 `.env` 後，範本已包含目前 stable 更新來源的
 `COMPDF_UPDATE_KEY_ID` 與 Base64 Ed25519 公鑰 `COMPDF_UPDATE_PUBLIC_KEY`。
-只有簽章金鑰更換時才需要修改。預設更新來源為本儲存庫 `updates` 分支。在完整儲存庫中使用已發佈映像啟動：
+只有簽章金鑰更換時才需要修改。預設更新來源為本儲存庫 `updates` 分支。在完整儲存庫中啟動全部服務：
 
 ```sh
-docker compose -f docker-compose.yml -f docker-compose.updater-container.yml up -d --wait --wait-timeout 600
+docker compose --env-file .env pull
+docker compose --env-file .env up -d --wait --wait-timeout 600
 ```
 
-免複製儲存庫的 Docker 安裝可從記錄的原始碼提交下載此覆寫檔案，沿用 `.compdf-install`
-儲存的專案名稱。後續 Compose 操作同時指定該專案名稱、環境檔案與兩個 Compose 檔案。
-此 Docker 覆寫檔案不適用於 Apple container。
+免複製儲存庫的 Docker 安裝可繼續使用記錄的覆寫檔案與 `.compdf-install` 儲存的專案名稱。
+新的完整儲存庫不需要額外覆寫檔案；舊的 `docker-compose.updater-container.yml` 仍保留以相容既有安裝。
 
-本機原始碼建置並啟用 Updater，可執行
+本機原始碼建置可執行
 `docker compose -f docker-compose.full.yml up -d --build --wait --wait-timeout 600`。
-安裝仍由管理員確認。應用程式更新器管理 App／Server；Updater 與 Infra 獨立部署。
-Updater 啟動前必須填寫上述兩個驗簽設定；基礎安裝與本機原始碼開發可不啟用 Updater。
+安裝仍由管理員確認。預設 Compose 指令會同時啟動應用程式、Updater 與 Infra。
 
 升級前備份資料庫、儲存空間、設定與授權檔案，不要刪除持久化磁碟區或改寫資料庫版本歷史。
 產品更新後，業務服務使用 `docker compose -f tmp/runtime-updater/docker-compose.json up -d`
@@ -170,7 +227,9 @@ Updater 啟動前必須填寫上述兩個驗簽設定；基礎安裝與本機原
 針對該標籤手動執行工作流程。工作流程發佈 Server/UI、Updater 映像，並在 `updates` 分支產生
 `stable/release.json` 與簽章 `stable/release.json.sig`。只推送原始碼不會建立更新來源或 Docker Hub 映像標籤。
 
-## 執行元件與原始碼結構
+<a id="architecture"></a>
+
+## 系統架構
 
 Infra 提供 MySQL、Redis 與物件儲存；App 執行 PDF／轉換 SDK；Server 提供介面、
 批次工作、MCP 與封裝前端；選用 Updater 執行經確認的更新。本儲存庫不包含商業 SDK 原始碼。
@@ -183,7 +242,6 @@ Infra 提供 MySQL、Redis 與物件儲存；App 執行 PDF／轉換 SDK；Serve
 | `deploy/`, `helm/` | 實際維護的部署工具 |
 | `deployment/`, `release/`, `migrations/` | 設定規範、版本與正式遷移 |
 | `configs/` | 執行設定與初始資料庫 SQL |
-| `tests/fixtures/` | 自動化測試樣本，不可當作發佈資料 |
 
 ## 原始碼開發
 
@@ -227,9 +285,56 @@ App 與 Infra 仍使用設定中的映像。這些原始碼命令僅適用於完
 Nginx 屬於入口層；線上／離線屬於交付方式，可以與 Compose 或 Kubernetes 組合使用。
 Compose 更新器不管理 Kubernetes 或 Apple container。
 
-## 授權與支援
+<a id="upgrade-to-enterprise"></a>
+
+## 升級至企業版
+
+實際功能、頁數限制與併發數以核發的授權及商業協議為準；部署前請聯絡銷售確認。
+
+[請聯絡銷售團隊](https://www.compdf.com/contact-sales?utm_source=github_ai_seLfhosted_oldopen_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_oldopen_tw&ref_platform_id=github_compdf_tw)，將方案升級至 **Enterprise** 版。
+
+| 功能  | 免費版 | 企業版 |
+| --- | --- | --- |
+| PDF 編輯 | ✅   | ✅   |
+| PDF 轉檔 | ✅   | ✅   |
+| Web 介面 | ✅   | ✅   |
+| Dashboard 管理控制台 | ✅   | ✅   |
+| 輸出文件不含浮水印 | ❌   | ✅   |
+| 不限制頁數 | ❌   | ✅   |
+| 自訂併發數 | ❌   | ✅   |
+| 商業授權 | ❌   | ✅   |
+| 技術支援 | ❌   | ✅   |
+
+<a id="documentation"></a>
+
+## 技術文件
+
+* 開發文件：[https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview](https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview?utm_source=github_ai_seLfhosted_open_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_open_tw&ref_platform_id=github_compdfkit_tw)
+
+* API Reference：[https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/api-reference-conversion](https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/api-reference-conversion?utm_source=github_ai_seLfhosted_open_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_open_tw&ref_platform_id=github_compdfkit_tw)
+
+<a id="support"></a>
+
+## 支援
+
+程式碼問題請提交 [GitHub Issues](https://github.com/ComPDFKit/compdf-self-hosted/issues)。
+
+有任何建議？[歡迎發起討論](https://github.com/ComPDFKit/compdf-self-hosted/discussions)。如果您覺得 ComPDF Self-Hosted 實用，歡迎在 GitHub 上為我們點亮一顆 ⭐ **Star**，支持我們持續成長與改進。
+
+<a id="license"></a>
+
+## 授權條款
 
 儲存庫程式碼採用 [MIT](LICENSE) 授權。商業 PDF／Conversion SDK、有效授權與客戶字型
 另行提供。產品與企業支援請造訪 [ComPDF](https://www.compdf.com/self-hosted-deployment)
 或[聯絡銷售](https://www.compdf.com/contact-sales)，程式問題可提交
 [GitHub Issues](https://github.com/ComPDFKit/compdf-self-hosted/issues)。
+
+---
+
+<p align="center">
+  <b>由 ComPDF 團隊打造</b><br>
+  <a href="https://compdf.com?utm_source=github_ai_seLfhosted_open_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_open_tw&ref_platform_id=github_compdfkit_tw">官網</a> ·
+  <a href="https://www.compdf.com/guides/pdf-sdk/self-hosted-deployment/overview?utm_source=github_ai_seLfhosted_open_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_open_tw&ref_platform_id=github_compdfkit_tw">技術文件</a> ·
+  <a href="https://www.compdf.com/contact-sales?utm_source=github_ai_seLfhosted_open_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_open_tw&ref_platform_id=github_compdfkit_tw">企業洽詢</a>
+</p>

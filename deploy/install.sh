@@ -182,6 +182,8 @@ prepare_install() {
   SOURCE="https://raw.githubusercontent.com/ComPDFKit/compdf-self-hosted/$resolved"
   project=$(printf '%s' "$TARGET" | cksum | awk '{print "compdf-" $1}')
   fetch_asset docker-compose.yml "$stage/docker-compose.yml"
+  # The container updater bootstraps its signed runtime Compose snapshot from this overlay.
+  fetch_asset docker-compose.updater-container.yml "$stage/docker-compose.updater-container.yml"
   fetch_asset .env.example "$stage/.env.example"
   fetch_asset configs/settings.yml "$stage/configs/settings.yml"
   fetch_asset deploy/install.sh "$stage/install.sh"
