@@ -158,28 +158,26 @@ real PDF processing.
 Missing/unreachable or expired metadata does not confirm a successful
 latest-version check. Updater independently verifies signatures before installation.
 
-Dashboard product installation and online runtime XML License updates need the
-independent Updater. Copy `.env.example` to `.env`; it already contains the
-current stable feed's `COMPDF_UPDATE_KEY_ID` and Base64 Ed25519
-`COMPDF_UPDATE_PUBLIC_KEY`. Replace them only when the signing key changes. The
-default feed is this repository's `updates` branch. From a complete checkout, start
-published images with:
+Dashboard product installation and online runtime XML License updates use the
+containerized Updater included in the default Compose file. Copy `.env.example`
+to `.env`; it already contains the current stable feed's
+`COMPDF_UPDATE_KEY_ID` and Base64 Ed25519 `COMPDF_UPDATE_PUBLIC_KEY`. Replace
+them only when the signing key changes. The default feed is this repository's
+`updates` branch. From a complete checkout, start all published services with:
 
 ```sh
-docker compose -f docker-compose.yml -f docker-compose.updater-container.yml up -d --wait --wait-timeout 600
+docker compose --env-file .env pull
+docker compose --env-file .env up -d --wait --wait-timeout 600
 ```
 
-Minimal Docker installations can download this overlay from their recorded source
-commit and retain their saved project name from `.compdf-install`. Run Compose
-with that project name, the environment file and both Compose files for later
-lifecycle commands. This Docker overlay is not supported by Apple container.
+Minimal Docker installations can continue using the recorded overlay and saved
+project name from `.compdf-install`. New full checkouts do not need the overlay;
+the older `docker-compose.updater-container.yml` remains for compatibility.
 
-To build local source with Updater, use
+To build local source, use
 `docker compose -f docker-compose.full.yml up -d --build --wait --wait-timeout 600`.
-Installation always needs administrator confirmation. The application updater
-manages App/Server; Updater and Infra have separate deployment lifecycles.
-Both trust settings must be configured before starting Updater. Basic installation
-and local source development can run without it.
+Installation always needs administrator confirmation. The default Compose command
+starts the application, Updater and Infra together.
 
 Back up the database, storage, configuration and licenses before an upgrade.
 Do not delete persistent volumes or relabel an existing database's schema history.

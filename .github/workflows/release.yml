@@ -216,4 +216,11 @@ jobs:
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --verify-tag --title "ComPDF Self-Hosted $RELEASE_TAG" --generate-notes
           fi
-          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/signed-release/release.json" "$RUNNER_TEMP/signed-release/release.json.sig" "$RUNNER_TEMP/signed-release/checksums.txt" --clobber
+          assets=(
+            "$RUNNER_TEMP/signed-release/release.json"
+            "$RUNNER_TEMP/signed-release/release.json.sig"
+          )
+          if [ -f "$RUNNER_TEMP/signed-release/checksums.txt" ]; then
+            assets+=("$RUNNER_TEMP/signed-release/checksums.txt")
+          fi
+          gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber

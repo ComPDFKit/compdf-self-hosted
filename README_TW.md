@@ -140,23 +140,22 @@ digest 的 App／Server 映像，備份資料、執行宣告的資料庫遷移�
 
 更新來源缺失、無法存取或清單過期時，不會確認為檢查成功。安裝前由 Updater 獨立驗證簽章。
 
-Dashboard 安裝產品更新與線上更新執行 XML License，需要獨立 Updater。將
+Dashboard 安裝產品更新與線上更新執行 XML License，使用預設 Compose 檔案中包含的 Updater。將
 `.env.example` 複製為 `.env` 後，範本已包含目前 stable 更新來源的
 `COMPDF_UPDATE_KEY_ID` 與 Base64 Ed25519 公鑰 `COMPDF_UPDATE_PUBLIC_KEY`。
-只有簽章金鑰更換時才需要修改。預設更新來源為本儲存庫 `updates` 分支。在完整儲存庫中使用已發佈映像啟動：
+只有簽章金鑰更換時才需要修改。預設更新來源為本儲存庫 `updates` 分支。在完整儲存庫中啟動全部服務：
 
 ```sh
-docker compose -f docker-compose.yml -f docker-compose.updater-container.yml up -d --wait --wait-timeout 600
+docker compose --env-file .env pull
+docker compose --env-file .env up -d --wait --wait-timeout 600
 ```
 
-免複製儲存庫的 Docker 安裝可從記錄的原始碼提交下載此覆寫檔案，沿用 `.compdf-install`
-儲存的專案名稱。後續 Compose 操作同時指定該專案名稱、環境檔案與兩個 Compose 檔案。
-此 Docker 覆寫檔案不適用於 Apple container。
+免複製儲存庫的 Docker 安裝可繼續使用記錄的覆寫檔案與 `.compdf-install` 儲存的專案名稱。
+新的完整儲存庫不需要額外覆寫檔案；舊的 `docker-compose.updater-container.yml` 仍保留以相容既有安裝。
 
-本機原始碼建置並啟用 Updater，可執行
+本機原始碼建置可執行
 `docker compose -f docker-compose.full.yml up -d --build --wait --wait-timeout 600`。
-安裝仍由管理員確認。應用程式更新器管理 App／Server；Updater 與 Infra 獨立部署。
-Updater 啟動前必須填寫上述兩個驗簽設定；基礎安裝與本機原始碼開發可不啟用 Updater。
+安裝仍由管理員確認。預設 Compose 指令會同時啟動應用程式、Updater 與 Infra。
 
 升級前備份資料庫、儲存空間、設定與授權檔案，不要刪除持久化磁碟區或改寫資料庫版本歷史。
 產品更新後，業務服務使用 `docker compose -f tmp/runtime-updater/docker-compose.json up -d`

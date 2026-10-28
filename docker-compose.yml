@@ -66,6 +66,7 @@ services:
       - COMPDF_DB_SCHEMA_VERSION=${COMPDF_DB_SCHEMA_VERSION:-1.1.0}
       - COMPDF_UPDATE_BASE_URL=${COMPDF_UPDATE_BASE_URL:-https://raw.githubusercontent.com/ComPDFKit/compdf-self-hosted/updates/}
       - COMPDF_UPDATE_CHANNEL=${COMPDF_UPDATE_CHANNEL:-stable}
+      - COMPDF_UPDATER_SOCKET=/run/compdf-updater/compdf-updater.sock
       - JWT_SECRET=${JWT_SECRET:-}
       - API_KEY=${API_KEY:-}
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
@@ -79,6 +80,7 @@ services:
     volumes:
       - ./configs:/app/configs
       - ./data/server-storage:/app/storage
+      - compdf_updater_run:/run/compdf-updater:ro
     command: ["sh", "-c", "npm run init:db && npm run start"]
     restart: unless-stopped
     healthcheck:
@@ -88,12 +90,45 @@ services:
       retries: 12
       start_period: 30s
 
+  compdf-updater:
+    image: ${COMPDF_UPDATER_IMAGE:-compdfkit/compdf-updater:1.1.0}
+    restart: unless-stopped
+    networks:
+      - compdf-internal
+    environment:
+      COMPDF_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME}
+      COMPDF_UPDATE_BASE_URL: ${COMPDF_UPDATE_BASE_URL:-https://raw.githubusercontent.com/ComPDFKit/compdf-self-hosted/updates/}
+      COMPDF_UPDATE_KEY_ID: ${COMPDF_UPDATE_KEY_ID:-}
+      COMPDF_UPDATE_PUBLIC_KEY: ${COMPDF_UPDATE_PUBLIC_KEY:-}
+      COMPDF_UPDATE_BEARER_TOKEN: ${COMPDF_UPDATE_BEARER_TOKEN:-}
+      COMPDF_UPDATE_CHANNEL: ${COMPDF_UPDATE_CHANNEL:-stable}
+      COMPDF_UPDATE_CHECK_INTERVAL_MINUTES: ${COMPDF_UPDATE_CHECK_INTERVAL_MINUTES:-0}
+      COMPDF_UPDATE_AUTO_DOWNLOAD: ${COMPDF_UPDATE_AUTO_DOWNLOAD:-false}
+      COMPDF_UPDATE_MYSQL_PASSWORD: ${COMPDF_UPDATE_MYSQL_PASSWORD:-compdfkit-pass-2026}
+      COMPDF_UPDATE_REGISTRY: ${COMPDF_UPDATE_REGISTRY:-}
+      COMPDF_UPDATE_REGISTRY_USERNAME: ${COMPDF_UPDATE_REGISTRY_USERNAME:-}
+      COMPDF_UPDATE_REGISTRY_PASSWORD: ${COMPDF_UPDATE_REGISTRY_PASSWORD:-}
+      DOCKER_CONFIG: /etc/compdf-updater/docker
+    volumes:
+      - .:/workspace
+      - ${COMPDF_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      - compdf_updater_run:/run/compdf-updater
+    tmpfs:
+      - /etc/compdf-updater:mode=0700
+    healthcheck:
+      test: ["CMD", "python3", "/usr/local/lib/compdf-updater/container.py", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
 volumes:
   compdf_output:
   compdf_redis_data:
   compdf_pdf_data:
   compdf_mysql_data:
   compdf_rustfs_data:
+  compdf_updater_run:
 
 networks:
   compdf-internal:

@@ -140,23 +140,22 @@ Compose 项目名并保留持久化卷。基础 Compose 发布 8080 端口，可
 
 更新源缺失、无法访问或清单过期时，不会确认为检查成功。安装前由 Updater 独立验证签名。
 
-Dashboard 安装产品更新和在线更新运行 XML License，需要独立 Updater。复制
+Dashboard 安装产品更新和在线更新运行 XML License 使用默认 Compose 文件中包含的 Updater。复制
 `.env.example` 为 `.env` 后，模板已包含当前 stable 更新源的
 `COMPDF_UPDATE_KEY_ID` 和 Base64 Ed25519 公钥 `COMPDF_UPDATE_PUBLIC_KEY`。
-只有签名密钥更换时才需要修改。默认更新源为本仓库 `updates` 分支。在完整仓库中使用已发布镜像启动：
+只有签名密钥更换时才需要修改。默认更新源为本仓库 `updates` 分支。在完整仓库中启动全部服务：
 
 ```sh
-docker compose -f docker-compose.yml -f docker-compose.updater-container.yml up -d --wait --wait-timeout 600
+docker compose --env-file .env pull
+docker compose --env-file .env up -d --wait --wait-timeout 600
 ```
 
-免克隆 Docker 安装可从记录的源码提交下载此覆盖文件，沿用 `.compdf-install` 中
-保存的项目名。后续 Compose 操作同时指定该项目名、环境文件和两个 Compose 文件。
-此 Docker 覆盖文件不适用于 Apple container。
+免克隆 Docker 安装可继续使用记录的覆盖文件和 `.compdf-install` 中保存的项目名。
+新的完整仓库不需要额外覆盖文件；旧的 `docker-compose.updater-container.yml` 仍保留用于兼容。
 
-本地源码构建并启用 Updater，可执行
+本地源码构建可执行
 `docker compose -f docker-compose.full.yml up -d --build --wait --wait-timeout 600`。
-安装仍由管理员确认。应用更新器管理 App／Server；Updater 与 Infra 独立部署。
-Updater 启动前必须填写上述两个验签配置；基础安装和本地源码开发可不启用 Updater。
+安装仍由管理员确认。默认 Compose 命令会同时启动应用、Updater 与 Infra。
 
 升级前备份数据库、存储、配置及授权文件，不要删除持久化卷或改写数据库版本历史。
 产品更新后，业务服务使用 `docker compose -f tmp/runtime-updater/docker-compose.json up -d`
