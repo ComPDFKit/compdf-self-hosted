@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "version": "1.1.0",
+  "channel": "stable",
+  "status": "active",
+  "minimumVersion": "1.1.0",
+  "minimumUpdaterVersion": "1.1.0",
+  "releasedAt": "2026-10-28T12:29:26Z",
+  "expiresAt": "2027-10-28T12:29:26Z",
+  "maintenanceRequired": true,
+  "infraUpgradeRequired": false,
+  "images": {
+    "app": {
+      "name": "compdfkit/compdf-app",
+      "tag": "1.0.0",
+      "digest": "sha256:02720ee23a1eabdbbfd8faece90e7669c5b9f2c897665b143bcb1865628e8b7c"
+    },
+    "server": {
+      "name": "compdfkit/compdf-server",
+      "tag": "1.1.0",
+      "digest": "sha256:e6be047f5f54ed925d71510a12956fa11c6b7f298f3849f8196a5dc9abed0fd6"
+    }
+  },
+  "migration": {
+    "from": "1.1.0",
+    "to": "1.1.0",
+    "required": false
+  },
+  "rollback": {
+    "application": true,
+    "database": false,
+    "requiresBackupRestore": false
+  },
+  "releaseNotes": "Batch file processing, MCP integration, API key management, online License management, signed product updates, and PDF tool improvements.",
+  "knownIssues": []
+}
