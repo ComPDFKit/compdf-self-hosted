@@ -7,6 +7,11 @@ on:
         description: Existing immutable release tag (for example v1.1.0)
         required: true
         type: string
+      republish_server_revision:
+        description: Full tagged commit SHA authorizing replacement of an existing Server image
+        default: ''
+        required: false
+        type: string
       minimum_version:
         description: Oldest supported product version
         default: '1.1.0'
@@ -39,6 +44,7 @@ jobs:
     environment: release
     timeout-minutes: 45
     env:
+      REPUBLISH_SERVER_REVISION: ${{ inputs.republish_server_revision }}
       RELEASE_TAG: ${{ inputs.tag }}
       MINIMUM_VERSION: ${{ inputs.minimum_version }}
       DATABASE_SCHEMA_FROM: ${{ inputs.database_schema_from }}
@@ -71,6 +77,9 @@ jobs:
           for path in ['server/package.json', 'frontend/compdf-web/package.json']:
               if json.loads(Path(path).read_text())['version'] != metadata['productVersion']:
                   raise SystemExit('Package version mismatch: ' + path)
+          republish = os.environ.get('REPUBLISH_SERVER_REVISION', '').strip()
+          if republish and republish != tagged_commit:
+              raise SystemExit('Server replacement requires the full tagged commit SHA')
           for key in ['DOCKERHUB_USERNAME', 'DOCKERHUB_TOKEN', 'RELEASE_SIGNING_PRIVATE_KEY', 'RELEASE_SIGNING_KEY_ID']:
               if not os.environ.get(key, '').strip():
                   raise SystemExit('Configure the release environment value: ' + key)
@@ -111,6 +120,10 @@ jobs:
               docker pull --platform linux/amd64 "${image%:*}@$digest" >/dev/null
               actual=$(docker image inspect "${image%:*}@$digest" --format "{{index .Config.Labels \"$label\"}}")
               if [ "$actual" != "$expected" ]; then
+                if [ "$component" = server ] && [ "${REPUBLISH_SERVER_REVISION:-}" = "$server_revision" ]; then
+                  echo "Explicitly rebuilding $image for $server_revision (previous digest: $digest)"
+                  continue
+                fi
                 echo "Published $image has different or unidentified source. Choose a new component version."
                 exit 1
               fi
