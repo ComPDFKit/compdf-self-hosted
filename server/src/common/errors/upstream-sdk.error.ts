@@ -23,6 +23,9 @@ export class UpstreamSdkError extends Error {
   /** Present ONLY for conversion-engine errors. Absent for PDF SDK errors. */
   public readonly errorCode?: string;
 
+  /** Confirmed password failure location for a two-PDF insertion. */
+  public readonly passwordSource?: 'source' | 'insert' | 'both';
+
   constructor(opts: {
     source: 'conversion' | 'pdf';
     status: number;
@@ -30,6 +33,7 @@ export class UpstreamSdkError extends Error {
     message: string;
     traceId?: string;
     errorCode?: string;
+    passwordSource?: 'source' | 'insert' | 'both';
   }) {
     super(opts.message);
     this.name = 'UpstreamSdkError';
@@ -38,6 +42,7 @@ export class UpstreamSdkError extends Error {
     this.code = opts.code;
     this.traceId = opts.traceId;
     this.errorCode = opts.errorCode;
+    this.passwordSource = opts.passwordSource;
   }
 
   /** True when the error came from the conversion engine (errorCode present). */

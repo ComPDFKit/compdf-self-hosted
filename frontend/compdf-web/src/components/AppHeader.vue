@@ -186,7 +186,8 @@ onBeforeUnmount(() => {
   object-fit: contain;
 }
 .brand-name {
-  color: var(--brand-color, #1668ff);
+  color: #000;
+  font-size: 18px;
 }
 .primary-nav {
   display: flex;

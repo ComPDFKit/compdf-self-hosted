@@ -32,6 +32,34 @@ describe('PdfController PDF standards conversion', () => {
   });
 });
 
+describe('PdfController PDF standards download filename', () => {
+  it('uses the current source PDF filename for a Chinese upload', async () => {
+    const convertStandard = vi.fn().mockResolvedValue({ buffer: Buffer.from('%PDF standardized'), headers: { 'content-type': 'application/pdf', 'content-disposition': 'attachment; filename="standardized.pdf"' } });
+    const controller = new PdfController({ convertStandard } as unknown as PdfSdkClient);
+    const pdf = { originalname: '中文归档-一.pdf', buffer: Buffer.from('%PDF') } as Express.Multer.File;
+    const icc = { originalname: 'sRGB.icc', buffer: Buffer.from('ICC') } as Express.Multer.File;
+    const req = { body: { request: JSON.stringify({ standard: 'pdfa1a' }) } } as Request;
+    const resMock = { set: vi.fn(), status: vi.fn(), send: vi.fn() }; resMock.status.mockReturnValue(resMock);
+    await controller.pdfa({ file: [pdf], iccFile: [icc] }, req, resMock as unknown as Response);
+    const disposition = resMock.set.mock.calls.find(([name]) => name === 'Content-Disposition')?.[1];
+    expect(disposition).toContain("filename*=UTF-8''%E4%B8%AD%E6%96%87%E5%BD%92%E6%A1%A3-%E4%B8%80.pdf");
+    expect(disposition).not.toContain('standardized.pdf');
+  });
+
+  it('uses each source filename independently when PDF/A is processed repeatedly', async () => {
+    const convertStandard = vi.fn().mockResolvedValue({ buffer: Buffer.from('%PDF standardized'), headers: {} });
+    const controller = new PdfController({ convertStandard } as unknown as PdfSdkClient);
+    const icc = { originalname: 'sRGB.icc', buffer: Buffer.from('ICC') } as Express.Multer.File;
+    for (const name of ['first.pdf', 'second.pdf']) {
+      const response = { set: vi.fn(), status: vi.fn(), send: vi.fn() }; response.status.mockReturnValue(response);
+      const pdf = { originalname: name, buffer: Buffer.from('%PDF') } as Express.Multer.File;
+      const req = { body: { request: JSON.stringify({ standard: 'pdfa1a' }) } } as Request;
+      await controller.pdfa({ file: [pdf], iccFile: [icc] }, req, response as unknown as Response);
+      expect(response.set).toHaveBeenCalledWith('Content-Disposition', `attachment; filename="${name}"; filename*=UTF-8''${name}`);
+    }
+  });
+});
+
 describe('PdfController watermark validation', () => {
   it('rejects a blank text watermark before calling the SDK', async () => {
     const addWatermark = vi.fn();

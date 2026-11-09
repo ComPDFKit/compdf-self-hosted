@@ -9,7 +9,7 @@ import en from '@/i18n/locales/en.json';
 describe('watermark form', () => {
   it('preserves watermark request fields with the new paired controls and page selection', async () => {
     const parameter = defaultParameter();
-    const wrapper = shallowMount(WatermarkSettings, { props: { parameter }, global: { plugins: [createI18n({ legacy: false, locale: 'en', flatJson: true, messages: { en: { ...en } } })] } });
+    const wrapper = shallowMount(WatermarkSettings, { props: { parameter }, global: { stubs: { PageRangeInput: false, PopoverRoot: { inheritAttrs: false, template: '<slot />' }, PopoverAnchor: { inheritAttrs: false, template: '<slot />' } }, plugins: [createI18n({ legacy: false, locale: 'en', flatJson: true, messages: { en: { ...en } } })] } });
     const fields = wrapper.findAll('label.watermark-field');
     await fields.find((field) => field.text() === 'Watermark Text')!.get('input').setValue('CONFIDENTIAL');
     await fields.find((field) => field.text() === 'Font Size')!.get('input').setValue('18');

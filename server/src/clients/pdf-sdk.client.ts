@@ -89,18 +89,50 @@ export class PdfSdkClient {
   }
 
   /** POST /v1/sync/pages/insert-from-pdf — `file` + `insertFile`. */
-  insertFromPdf(
+  async insertFromPdf(
     file: MulterFile,
     insertFile: MulterFile,
     request: Record<string, unknown>,
     token: string,
   ): Promise<SdkFileResult> {
-    return this.callSync(
-      '/v1/sync/pages/insert-from-pdf',
-      [toPart('file', file), toPart('insertFile', insertFile)],
-      normalizeInsertFromPdfRequest(request),
-      token,
-    );
+    const normalized = normalizeInsertFromPdfRequest(request);
+    try {
+      return await this.callSync(
+        '/v1/sync/pages/insert-from-pdf',
+        [toPart('file', file), toPart('insertFile', insertFile)],
+        normalized,
+        token,
+      );
+    } catch (error) {
+      if (!isPdfPasswordError(error)) throw error;
+      // The SDK returns the same password code for either PDF. Only on that
+      // failure, open each document independently to confirm the failing input.
+      // Never guess a location from a password's presence or the SDK message.
+      const failures = await Promise.all([
+        this.hasPdfPasswordError(file, normalized.targetPassword, token),
+        this.hasPdfPasswordError(insertFile, normalized.insertPassword, token),
+      ]);
+      const passwordSource = failures[0] && failures[1] ? 'both'
+        : failures[0] ? 'source' : failures[1] ? 'insert' : undefined;
+      if (!passwordSource) throw error;
+      throw new UpstreamSdkError({
+        source: error.source, status: error.status, code: error.code,
+        message: error.message, traceId: error.traceId, errorCode: error.errorCode,
+        passwordSource,
+      });
+    }
+  }
+
+  private async hasPdfPasswordError(file: MulterFile, password: unknown, token: string): Promise<boolean> {
+    try {
+      await this.callSync('/v1/sync/documents/info', [toPart('file', file)],
+        typeof password === 'string' ? { password } : {}, token);
+      return false;
+    } catch (error) {
+      // Other probe failures cannot identify a bad password and must not
+      // replace the original insertion error.
+      return isPdfPasswordError(error);
+    }
   }
 
   /** POST /v1/sync/pages/insert-blank — `file`. */
@@ -331,6 +363,11 @@ export class PdfSdkClient {
       message: e.message ?? 'PDF SDK request failed',
     });
   }
+}
+
+function isPdfPasswordError(error: unknown): error is UpstreamSdkError {
+  return error instanceof UpstreamSdkError && error.source === 'pdf'
+    && (error.code === 120001 || error.code === 120002);
 }
 
 function toPart(fieldname: string, file: MulterFile): InternalPart {

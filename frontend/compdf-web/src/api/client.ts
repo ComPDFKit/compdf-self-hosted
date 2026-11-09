@@ -25,9 +25,10 @@ export interface ApiError {
   type?: 'conversion' | 'pdf' | 'server';
   /** Six-digit business code returned by the server or processing SDK. */
   code?: number;
-  errorCode?: string;
+  errorCode?: string | null;
   message: string;
   traceId?: string;
+  passwordSource?: 'source' | 'insert' | 'both';
 }
 
 type ApiBaseEnv = {
@@ -272,6 +273,8 @@ function normalizeApiErrorBody(body: Record<string, unknown>): ApiError {
     errorCode: typeof body.errorCode === 'string' ? body.errorCode : undefined,
     message,
     traceId: typeof body.traceId === 'string' ? body.traceId : undefined,
+    passwordSource: body.passwordSource === 'source' || body.passwordSource === 'insert' || body.passwordSource === 'both'
+      ? body.passwordSource : undefined,
   };
 }
 

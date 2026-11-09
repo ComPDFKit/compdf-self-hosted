@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, useId } from 'vue';
 import { useI18n } from 'vue-i18n';
+import PageRangeInput from './PageRangeInput.vue';
 import { splitCustomRanges, type SplitMode } from '@/utils/batch-files';
 import MinusIcon from '@/assets/icons/ui/split-minus.svg?component';
 import PlusIcon from '@/assets/icons/ui/split-plus.svg?component';
@@ -39,7 +40,7 @@ function step(delta: number) {
       </label>
       <div class="split-field">
         <label :for="`${id}-range`">{{ t('batchTools.splitRanges') }}</label>
-        <input v-if="mode === 'custom'" :id="`${id}-range`" v-model="ranges" type="text" :disabled="disabled" placeholder="1-3,4-6,7-12" :title="t('batchTools.splitGroupsHelp')">
+        <PageRangeInput v-if="mode === 'custom'" :id="`${id}-range`" v-model="ranges" :disabled="disabled" placeholder="1-3,4-6,7-12" :title="t('batchTools.splitGroupsHelp')" />
         <i18n-t v-else scope="global" :keypath="mode === 'every' ? 'batchTools.splitEverySentence' : 'batchTools.splitEqualSentence'" tag="div" class="split-quantity">
           <template #count>
             <span class="split-stepper">

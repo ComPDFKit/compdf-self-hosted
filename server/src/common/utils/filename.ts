@@ -45,6 +45,17 @@ export function normalizeUploadedFilename(name: string): string {
   return filenameRepairScore(repaired) > filenameRepairScore(name) ? repaired : name;
 }
 
+/** Prefer a known binary output format over the requested conversion target. */
+export function resultFileExtension(contentType: string | undefined, fallback?: string): string | undefined {
+  const mime = contentType?.split(';')[0]?.trim().toLowerCase() ?? '';
+  const extensions: Record<string, string> = {
+    'application/zip': 'zip', 'application/x-zip-compressed': 'zip',
+    'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg',
+    'image/tiff': 'tiff', 'image/bmp': 'bmp', 'image/webp': 'webp', 'image/gif': 'gif',
+  };
+  return extensions[mime] ?? fallback;
+}
+
 export function processedFilename(
   sourceFilename: string,
   marker: string,

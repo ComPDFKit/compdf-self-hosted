@@ -23,6 +23,7 @@
  */
 import { computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import PageRangeInput from './PageRangeInput.vue';
 import { COMPRESS_PRESET_FLAGS, CONVERSION_FEATURES, type ConversionFeatures, type UploadParameter } from '@/config/param-schema';
 import {
   Select,
@@ -115,6 +116,7 @@ const hasInsertOptions = computed(() => !!features.value.insertOptions);
 const hasWatermarkOptions = computed(() => !!features.value.watermarkOptions);
 const hasEncryptOptions = computed(() => !!features.value.encryptOptions);
 const hasStandardOptions = computed(() => !!features.value.standardOptions);
+const hasUaMetadata = computed(() => parameter.value.pdfStandard === 'pdfua1');
 // These three gate on toType, not on a features flag.
 const hasCompressOptions = computed(() => props.toType === 'compress');
 const hasMergeOptions = computed(() => props.toType === 'merge');
@@ -123,6 +125,7 @@ const hasSplitOptions = computed(() => props.toType === 'split');
 const blankPageSizePresets = {
   a4: { width: '595', height: '842' },
   a3: { width: '842', height: '1191' },
+  letter: { width: '612', height: '792' },
   legal: { width: '612', height: '1008' },
 } as const;
 
@@ -145,7 +148,6 @@ const rotateDirections = [
   { value: '180', key: 'flip' },
 ] as const;
 const imageFormats = ['png', 'jpg', 'jpeg', 'jpeg2000', 'bmp', 'tiff', 'tga', 'gif', 'webp'];
-const pageRangePlaceholder = computed(() => `all ${t('pdfToolDetail.upload.settings.pageRangeOr')} 1-3,5`);
 const ocrLanguages = [
   'AUTO',
   'CHINESE',
@@ -361,7 +363,7 @@ watch(
         </div>
       </div>
       <div class="setting-row">
-        <div class="setting-label">{{ t('pdfToolDetail.upload.settings.pdfStandard') }}:</div>
+        <div class="setting-label">{{ t('pdfToolDetail.upload.settings.pdfStandard') }}</div>
         <div class="setting-control">
           <Select v-model="parameter.pdfStandard" :disabled="converting">
             <SelectTrigger class="select-input"><SelectValue /></SelectTrigger>
@@ -371,14 +373,14 @@ watch(
           </Select>
         </div>
       </div>
-      <div class="setting-row">
-        <div class="setting-label">{{ t('pdfToolDetail.upload.settings.outputTitle') }}:</div>
+      <div v-if="hasUaMetadata" class="setting-row">
+        <div class="setting-label">{{ t('pdfToolDetail.upload.settings.outputTitle') }}</div>
         <div class="setting-control">
           <input type="text" v-model="parameter.outputTitle" :disabled="converting" class="text-input">
         </div>
       </div>
-      <div class="setting-row">
-        <div class="setting-label">{{ t('pdfToolDetail.upload.settings.outputLanguage') }}:</div>
+      <div v-if="hasUaMetadata" class="setting-row">
+        <div class="setting-label">{{ t('pdfToolDetail.upload.settings.outputLanguage') }}</div>
         <div class="setting-control">
           <Select v-model="parameter.outputLanguage" :disabled="converting">
             <SelectTrigger class="select-input"><SelectValue /></SelectTrigger>
@@ -391,13 +393,7 @@ watch(
         </div>
       </div>
       <div class="setting-row">
-        <div class="setting-label">{{ t('pdfToolDetail.upload.settings.outputFileName') }}:</div>
-        <div class="setting-control">
-          <input type="text" v-model="parameter.outputFileName" placeholder="standard.pdf" :disabled="converting" class="text-input">
-        </div>
-      </div>
-      <div class="setting-row">
-        <div class="setting-label">{{ t('pdfToolDetail.upload.settings.iccProfile') }}:</div>
+        <div class="setting-label">{{ t('pdfToolDetail.upload.settings.iccProfile') }}</div>
         <div class="setting-control icc-profile-control">
           <button
             type="button"
@@ -506,7 +502,7 @@ watch(
     <div v-if="hasPage && !hasSplitOptions" class="setting-row" :class="{ 'markdown-order-2': isMarkdown }">
       <div class="setting-label">{{ t('pdfToolDetail.upload.settings.pageRange') }}:</div>
       <div class="setting-control">
-        <input type="text" placeholder="1,2,3-5" v-model="parameter.pageRanges" :disabled="converting" class="text-input">
+        <PageRangeInput v-model="parameter.pageRanges" :disabled="converting" size="form" />
       </div>
     </div>
 
@@ -606,6 +602,7 @@ watch(
             <SelectContent>
               <SelectItem value="a4">{{ t('pdfToolDetail.upload.settings.pageSizes.a4') }}</SelectItem>
               <SelectItem value="a3">{{ t('pdfToolDetail.upload.settings.pageSizes.a3') }}</SelectItem>
+              <SelectItem value="letter">{{ t('pdfToolDetail.upload.settings.pageSizes.letter') }}</SelectItem>
               <SelectItem value="legal">{{ t('pdfToolDetail.upload.settings.pageSizes.legal') }}</SelectItem>
               <SelectItem value="custom">{{ t('pdfToolDetail.upload.settings.pageSizes.custom') }}</SelectItem>
             </SelectContent>
@@ -638,7 +635,7 @@ watch(
         <div class="setting-row">
           <div class="setting-label">{{ t('pdfToolDetail.upload.settings.sourcePages') }}:</div>
           <div class="setting-control">
-            <input type="text" placeholder="1-2,4" v-model="parameter.sourcePages" :disabled="converting" class="text-input">
+            <PageRangeInput v-model="parameter.sourcePages" :disabled="converting" size="form" :aria-label="t('pdfToolDetail.upload.settings.sourcePages')" />
           </div>
         </div>
         <!-- 15. Insert PDF password -->
@@ -910,7 +907,7 @@ watch(
         </div>
         <div class="merge-field">
           <div class="merge-field-label">{{ t('pdfToolDetail.upload.settings.pageRange') }}</div>
-          <input type="text" :placeholder="pageRangePlaceholder" v-model="(parameter.mergeFilePageRanges as string[])[index]" :disabled="converting" class="text-input">
+          <PageRangeInput v-model="(parameter.mergeFilePageRanges as string[])[index]" :disabled="converting" size="form" />
         </div>
         <div class="merge-field">
           <div class="merge-field-label">{{ t('pdfToolDetail.upload.settings.password') }}</div>
@@ -935,13 +932,7 @@ watch(
         </div>
         <label class="split-field">
           <span class="split-field-label">{{ t('pdfToolDetail.upload.settings.pageRange') }}</span>
-          <input
-            type="text"
-            class="text-input split-page-range"
-            :placeholder="pageRangePlaceholder"
-            v-model="parameter.pageRanges"
-            :disabled="converting"
-          >
+          <PageRangeInput v-model="parameter.pageRanges" :disabled="converting" size="form" input-class="split-page-range" />
         </label>
         <label class="split-field">
           <span class="split-field-label">{{ t('pdfToolDetail.upload.settings.password') }}</span>
@@ -1097,6 +1088,7 @@ watch(
   outline: none;
   transition: border-color 0.15s;
 }
+.file-card-form :deep(.page-range-control),
 .file-card-form .text-input {
   width: 100%;
   height: 40px;
@@ -1339,7 +1331,9 @@ watch(
   min-width: 0;
   font-size: 13px;
   color: #0a0d1c;
-  word-break: break-all;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .file-chip-clear {
   flex: none;

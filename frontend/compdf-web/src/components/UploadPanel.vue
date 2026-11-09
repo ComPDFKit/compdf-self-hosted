@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import PageRangeInput from './PageRangeInput.vue';
 import { onClickOutside } from '@vueuse/core';
 import type { AxiosResponse } from 'axios';
 import { apiClient, toApiError, parseContentDispositionFilename } from '@/api/client';
@@ -8,10 +9,11 @@ import { apiErrorTranslationKey } from '@/api/error-localization';
 import { batchApi, buildBatchRequest, type BatchInfo } from '@/api/batch';
 import type { Endpoint } from '@/config/convert-map';
 import { toolI18nKey } from '@/config/i18n-keys';
-import { buildRequest, defaultParameter, watermarkValidationKey, compressImageQualityValidationKey, deletePageRangeValidationKey, encryptPasswordValidationKey, imageDpiValidationKey, insertSourcePageRangeValidationKey } from '@/config/param-schema';
+import { buildRequest, defaultParameter, watermarkValidationKey, compressImageQualityValidationKey, deletePageRangeValidationKey, encryptPasswordValidationKey, imageDpiValidationKey, insertSourcePageRangeValidationKey, insertBlankValidationKey } from '@/config/param-schema';
 import { buildStampRequest, defaultStampParameter, stampValidationKey } from '@/config/stamp-schema';
 import { droppedFiles, fileValidationKey, parsePages, splitCustomRanges, type PickedFile, type SplitMode } from '@/utils/batch-files';
 import { nameSplitOutputs, saveBlob, zipFiles } from '@/utils/result-archive';
+import { defaultResultFilename, availableArchivePath } from '@/utils/result-filenames';
 import { randomUuid } from '@/utils/random-uuid';
 import ParamForm from './ParamForm.vue';
 import StampSettings from './StampSettings.vue';
@@ -42,11 +44,12 @@ const props = defineProps<{ fromType: string; toType: string; mode: 'single' | '
 const emit = defineEmits<{ (e: 'updateStatus', status: string): void }>();
 const { t } = useI18n();
 type RowStatus = 'ready' | 'uploading' | 'uploaded' | 'queued' | 'processing' | 'success' | 'failed' | 'canceled';
+type ErrorMessage = string | { key: string; insertContext?: { sourceFile: string; insertFile: string } };
 interface FileRow {
   id: string; file: File; path: string; password: string; showPassword: boolean; pageRange: string;
-  status: RowStatus; error: string; validation: string | null;
+  status: RowStatus; error: ErrorMessage; validation: string | null;
   itemId?: string; batchId?: string;
-  outputName?: string; result?: Blob; request?: Record<string, unknown>; field?: string;
+  outputName?: string; requestedName?: string; result?: Blob; request?: Record<string, unknown>; field?: string;
 }
 const rows = ref<FileRow[]>([]);
 const selectedId = ref('');
@@ -71,9 +74,9 @@ const stampKind = computed(() => props.toolSlug.includes('bates') ? 'bates' as c
 const stamp = ref(defaultStampParameter(stampKind.value));
 const isStamp = computed(() => ['add-headers-footers', 'add-bates'].includes(props.toolSlug));
 const isRemoval = computed(() => ['remove-headers-footers', 'remove-bates'].includes(props.toolSlug));
-const hasFilePageRange = computed(() => props.toType === 'merge');
+const hasFilePageRange = computed(() => props.toType === 'merge' || isRemoval.value || props.toType === 'removeWatermark');
 const hasSettings = computed(() => {
-  if (hasFilePageRange.value || isRemoval.value) return false;
+  if (hasFilePageRange.value) return false;
   if (props.toType !== 'pdf' || props.fromType === 'pdf') return true;
   const features = CONVERSION_FEATURES[`${props.fromType}/${props.toType}`] ?? {};
   // Opening passwords already belong to the file rows, not the settings panel.
@@ -102,6 +105,12 @@ const locked = computed(() => running.value || started.value);
 const completed = computed(() => started.value && !running.value && !pollFailed.value);
 const filesDisabled = computed(() => running.value || downloading.value || pollFailed.value);
 const isTrialLicense = computed(() => window.COMPDF_CONFIG?.isFormalLicense === false);
+const trialLimitKey = computed(() => {
+  // Route families distinguish PDF operations (including PDF/A) from conversions.
+  if (props.endpoint.kind === 'pdf') return 'batchTools.trialLimitPdfOperations';
+  if (props.endpoint.kind === 'convert-to-pdf') return 'batchTools.trialLimitToPdf';
+  return 'batchTools.trialLimit';
+});
 const upgradeUrl = computed(() => window.COMPDF_CONFIG?.contactUrl || 'https://www.compdf.com/contact-sales');
 const globalError = computed(() => errorText.value && (pollFailed.value || !rows.value.some((row) => row.error === errorText.value)) ? errorText.value : '');
 const ruleErrors = computed(() => new Map(rows.value.map((row) => [row.id, rowRuleError(row)])));
@@ -117,10 +126,26 @@ const actionLabel = computed(() => props.toType === 'split' ? t('batchTools.star
 
 watch([running, started, () => rows.value.length], () => emit('updateStatus', running.value ? 'uploading' : started.value ? 'success' : rows.value.length ? 'await' : ''));
 
+// Store translation keys, not rendered text, so existing failures follow locale changes.
+function renderError(message: ErrorMessage): string {
+  if (typeof message === 'string') return message;
+  return message.insertContext
+    ? t(message.key, { ...message.insertContext, reset: t('batchTools.resetParameters') })
+    : t(message.key);
+}
+
 async function localError(error: unknown): Promise<string> {
+  return renderError(await resolveError(error));
+}
+
+async function resolveError(error: unknown, insertContext?: { sourceFile: string; insertFile: string }): Promise<ErrorMessage> {
   const apiError = await toApiError(error);
   const key = apiErrorTranslationKey(apiError, props.endpoint.kind === 'pdf' ? 'pdf' : 'conversion');
-  return key ? t(`pdfToolDetail.upload.errors.apiCodes.${key}`) : apiError.message;
+  if (insertContext && ['passwordRequired', 'invalidPassword', 'pdfPasswordError'].includes(key ?? '')) {
+    const location = apiError.passwordSource ?? 'unknown';
+    return { key: `pdfToolDetail.upload.errors.insertPassword.${location}`, insertContext };
+  }
+  return key ? { key: `pdfToolDetail.upload.errors.apiCodes.${key}` } : apiError.message;
 }
 
 async function addFiles(files: PickedFile[]) {
@@ -151,13 +176,28 @@ async function changeFiles(event: Event) {
   target.value = '';
   await addFiles(files);
 }
-async function drop(event: DragEvent) {
+function isExternalFileDrag(event: DragEvent): boolean {
+  return Array.from(event.dataTransfer?.types ?? []).includes('Files');
+}
+function updateDragState(event: DragEvent) {
+  if (rows.value.length || filesDisabled.value || draggingId.value || !isExternalFileDrag(event)) return;
+  // dragover keeps firing while the pointer is inside the panel. Treat it as
+  // the source of truth instead of counting bubbling dragenter/dragleave events.
+  dragDepth.value = 1;
+}
+function clearDragState(event?: DragEvent) {
+  const currentTarget = event?.currentTarget;
+  const relatedTarget = event?.relatedTarget;
+  if (currentTarget instanceof Node && relatedTarget instanceof Node && currentTarget.contains(relatedTarget)) return;
   dragDepth.value = 0;
-  if (filesDisabled.value || !event.dataTransfer || draggingId.value) return;
+}
+async function drop(event: DragEvent) {
+  clearDragState();
+  if (rows.value.length || filesDisabled.value || !event.dataTransfer || draggingId.value) return;
   readingFolder.value = true;
   try { await addFiles(await droppedFiles(event.dataTransfer)); }
   catch { errorText.value = t('batchTools.readFolderFailed'); }
-  finally { readingFolder.value = false; }
+  finally { readingFolder.value = false; clearDragState(); }
 }
 function removeRow(id: string) {
   if (running.value || downloading.value || pollFailed.value) return;
@@ -187,11 +227,12 @@ function dropRow(id: string) {
 function editAgain() {
   if (running.value || downloading.value || pollFailed.value) return;
   started.value = false; activeBatch.value = ''; pollFailed.value = false; filter.value = 'all'; settingsTouched.value = false;
-  rows.value.forEach((row) => Object.assign(row, { status: 'ready', itemId: undefined, batchId: undefined, result: undefined, request: undefined, outputName: undefined, error: '' }));
+  rows.value.forEach((row) => Object.assign(row, { status: 'ready', itemId: undefined, batchId: undefined, result: undefined, request: undefined, requestedName: undefined, outputName: undefined, error: '' }));
 }
 
 const validationKey = computed(() => {
   if (isStamp.value) return stampValidationKey(stampKind.value, stamp.value);
+  if (isRemoval.value) return null;
   if (props.toType === 'addWatermark') {
     if (parsePages(normalizedFileRange(parameter.value.pageRanges)) === null) return 'batchTools.stamp.errors.pages';
     if (parameter.value.watermarkType === 'text' && parameter.value.watermarkFontColor && !/^#[\da-f]{6}$/i.test(parameter.value.watermarkFontColor)) return 'batchTools.stamp.errors.color';
@@ -201,6 +242,7 @@ const validationKey = computed(() => {
   if (props.toType === 'delete') return deletePageRangeValidationKey(parameter.value.pageRanges);
   if (props.toType === 'encrypt') return encryptPasswordValidationKey(parameter.value.encryptUserPassword);
   if (props.toType === 'pdfa' && !iccProfileFile.value) return 'pdfToolDetail.upload.errors.iccProfileRequired';
+  if (props.toType === 'insert' && parameter.value.insertActionType === 'BLANK') return insertBlankValidationKey(parameter.value);
   if (props.toType === 'insert' && parameter.value.insertActionType === 'FROM_PDF') return !insertTargetFile.value ? 'pdfToolDetail.upload.errors.insertFileCount' : insertSourcePageRangeValidationKey(parameter.value.sourcePages);
   if (props.fromType === 'pdf' && ['png', 'jpg', 'img'].includes(props.toType)) return imageDpiValidationKey(parameter.value.imgDpi);
   if (props.toType === 'merge' && ready.value.length < 2) return 'pdfToolDetail.upload.errors.mergeRequired';
@@ -218,7 +260,8 @@ function rowRuleError(row: FileRow): string | null {
 }
 const canStart = computed(() => !locked.value && !readingFolder.value && !validationKey.value && ready.value.some((row) => !rowRuleError(row)));
 const effectiveEndpoint = computed<Endpoint>(() => props.toType === 'insert' && parameter.value.insertActionType === 'BLANK' ? { kind: 'pdf', op: 'insert-blank' } : props.endpoint);
-const useSync = computed(() => props.toType === 'split' || props.toType === 'encrypt' || (props.toType === 'addWatermark' && parameter.value.watermarkType === 'image') || !buildBatchRequest(effectiveEndpoint.value));
+// Batch requests share parameters; differing file ranges must be sent separately.
+const useSync = computed(() => (hasFilePageRange.value && props.toType !== 'merge' && new Set(ready.value.map((row) => normalizedFileRange(row.pageRange))).size > 1) || props.toType === 'split' || props.toType === 'encrypt' || (props.toType === 'addWatermark' && parameter.value.watermarkType === 'image') || !buildBatchRequest(effectiveEndpoint.value));
 
 function normalizedFileRange(value: string): string {
   return value.trim().toLowerCase().replace(/[、，]/g, ',').replace(/\s*([,-])\s*/g, '$1') || 'all';
@@ -226,9 +269,10 @@ function normalizedFileRange(value: string): string {
 
 function requestFor(row: FileRow): { field: string; payload: Record<string, unknown> } {
   if (isStamp.value) return { field: 'request', payload: buildStampRequest(stampKind.value, stamp.value) };
-  // Removal endpoints operate on all pages by default and accept no page range.
-  if (isRemoval.value) return { field: 'request', payload: {} };
+  // Removal endpoints default to all pages and accept the same 1-based range syntax.
+  if (isRemoval.value) return { field: 'request', payload: { pages: normalizedFileRange(row.pageRange) } };
   const config = { ...parameter.value, mergePasswords: ready.value.map((item) => item.password), mergeFilePageRanges: ready.value.map((item) => normalizedFileRange(item.pageRange)) };
+  if (props.toType === 'removeWatermark') config.pageRanges = normalizedFileRange(row.pageRange);
   if (props.toType === 'addWatermark') config.pageRanges = normalizedFileRange(config.pageRanges);
   const result = buildRequest({ fromType: props.fromType, toType: props.toType, parameter: config, password: '', files: props.toType === 'merge' ? ready.value.map((item) => item.file) : [row.file], isCsvMerge: isCsvMerge.value === '1', watermarkImageFile: watermarkImageFile.value ?? undefined, insertTargetFile: insertTargetFile.value ?? undefined });
   if (props.toType === 'split') {
@@ -264,10 +308,11 @@ async function runSync(row: FileRow, mergeRows?: FileRow[]) {
     const response = await apiClient.post<Blob>(url, form, { responseType: 'blob', signal: abortController.signal });
     if (!alive) return;
     const blob = props.toType === 'split' ? await nameSplitOutputs(response.data, row.file.name, splitSeparator.value) : response.data;
-    const filename = parseContentDispositionFilename(response.headers['content-disposition']) ?? row.file.name.replace(/\.[^.]+$/, props.toType === 'split' ? '.zip' : '.pdf');
+    const filename = parseContentDispositionFilename(response.headers['content-disposition']);
     for (const item of mergeRows ?? [row]) Object.assign(item, { status: 'success', result: blob, outputName: filename, error: '' });
   } catch (error) {
-    const message = await localError(error);
+    const message = await resolveError(error, ep.kind === 'pdf' && ep.op === 'insert-from-pdf'
+      ? { sourceFile: row.file.name, insertFile: insertTargetFile.value?.name ?? '' } : undefined);
     for (const item of mergeRows ?? [row]) Object.assign(item, { status: 'failed', error: message });
   }
 }
@@ -278,7 +323,7 @@ function applyBatch(batch: BatchInfo) {
     if (!row) continue;
     row.status = item.status; row.outputName = item.outputName;
     const key = item.failureCode ? apiErrorTranslationKey({ code: Number(item.failureCode), errorCode: item.failureCode, message: item.failureReason ?? '' }, props.endpoint.kind === 'pdf' ? 'pdf' : 'conversion') : null;
-    row.error = item.failureReason ? (key ? t(`pdfToolDetail.upload.errors.apiCodes.${key}`) : item.failureReason) : '';
+    row.error = item.failureReason ? (key ? { key: `pdfToolDetail.upload.errors.apiCodes.${key}` } : item.failureReason) : '';
   }
 }
 function waitForPoll() {
@@ -310,8 +355,8 @@ async function start() {
   const candidates = rows.value.filter((row) => row.status === 'ready');
   for (const row of candidates) {
     const error = rowRuleError(row);
-    if (error) { row.status = 'failed'; row.error = t(error); }
-    else { const request = requestFor(row); row.request = request.payload; row.field = request.field; }
+    if (error) { row.status = 'failed'; row.error = { key: error }; }
+    else { const request = requestFor(row); row.request = request.payload; row.field = request.field; row.requestedName = parameter.value.outputFileName.trim(); }
   }
   const valid = candidates.filter((row) => row.status === 'ready');
   try {
@@ -336,7 +381,7 @@ async function start() {
           ? await batchApi.upload(batch.batchId, row.file, row.password, row.path)
           : await batchApi.upload(batch.batchId, row.file, row.password);
         row.itemId = item.itemId; row.batchId = batch.batchId; row.status = item.status;
-      } catch (error) { row.status = 'failed'; row.error = await localError(error); }
+      } catch (error) { row.status = 'failed'; row.error = await resolveError(error); }
     }
     if (!valid.some((row) => row.itemId)) return;
     if (!alive) return;
@@ -364,7 +409,7 @@ async function retryRows(targets: FileRow[]) {
       if (row.itemId) {
         try { await batchApi.retry(row.itemId, { password: row.password }); row.status = 'queued'; row.error = ''; activeBatch.value = row.batchId!; remoteRetry = true; }
         catch (error) {
-          row.error = await localError(error);
+          row.error = await resolveError(error);
           // The retry may have been accepted before its response was lost.
           // Reconcile this batch instead of stranding an already-running item.
           activeBatch.value = row.batchId!;
@@ -372,10 +417,11 @@ async function retryRows(targets: FileRow[]) {
         }
       } else {
         const validation = rowRuleError(row);
-        if (validation) { row.error = t(validation); continue; }
+        if (validation) { row.error = { key: validation }; continue; }
         if (!row.request) {
           const request = requestFor(row);
           row.request = request.payload;
+          row.requestedName = parameter.value.outputFileName.trim();
           row.field = request.field;
         }
         await runSync(row);
@@ -385,16 +431,28 @@ async function retryRows(targets: FileRow[]) {
   } finally { if (alive) running.value = false; }
 }
 
-async function resultFor(row: FileRow): Promise<Blob> {
-  if (row.result) return row.result;
+function resultFilename(row: FileRow, blob: Blob, reportedName?: string): string {
+  return defaultResultFilename(effectiveEndpoint.value, row.file.name, blob.type, {
+    outputFileName: row.requestedName, zipFileName: row.requestedName,
+  }, reportedName);
+}
+
+async function resultFor(row: FileRow): Promise<{ blob: Blob; filename: string }> {
+  if (row.result) return {
+    blob: row.result,
+    filename: resultFilename(row, row.result, row.outputName),
+  };
   const response: AxiosResponse<Blob> = await batchApi.downloadItem(row.itemId!);
-  return response.data;
+  return {
+    blob: response.data,
+    filename: resultFilename(row, response.data, parseContentDispositionFilename(response.headers['content-disposition']) || row.outputName),
+  };
 }
 async function download(row: FileRow) {
   try {
     const snapshot = { ...row };
-    const blob = await resultFor(snapshot);
-    if (alive) saveBlob(blob, snapshot.outputName ?? snapshot.file.name);
+    const { blob, filename } = await resultFor(snapshot);
+    if (alive) saveBlob(blob, filename);
   }
   catch (error) { errorText.value = await localError(error); }
 }
@@ -404,17 +462,17 @@ async function downloadAll() {
   try {
     if (props.toType === 'merge') {
       const row = { ...successes.value[0]! };
-      const blob = await resultFor(row);
-      if (alive) saveBlob(blob, row.outputName ?? row.file.name.replace(/\.[^.]+$/, '.pdf'));
+      const { blob, filename } = await resultFor(row);
+      if (alive) saveBlob(blob, filename);
       return;
     }
     const files: Record<string, Uint8Array> = Object.create(null);
     const unique = successes.value.map((row) => ({ ...row }));
-    for (const [index, row] of unique.entries()) {
-      const directory = row.path.includes('/') ? row.path.slice(0, row.path.lastIndexOf('/') + 1) : '';
-      let name = (directory + (row.outputName ?? row.file.name)).split(/[\\/]/).filter((part) => part && part !== '.' && part !== '..').join('/');
-      if (files[name]) name = `${index + 1}-${name}`;
-      files[name] = new Uint8Array(await (await resultFor(row)).arrayBuffer());
+    for (const row of unique) {
+      const { blob, filename } = await resultFor(row);
+      if (!alive) return;
+      const name = availableArchivePath(row.path, filename, files);
+      files[name] = new Uint8Array(await blob.arrayBuffer());
       if (!alive) return;
     }
     const archive = await zipFiles(files);
@@ -427,7 +485,7 @@ function sizeLabel(bytes: number) { return bytes < 1024 * 1024 ? `${(bytes / 102
 function rowStatus(row: FileRow) { return t(`batchTools.${row.validation ? 'invalid' : row.status === 'success' ? 'processed' : row.status === 'failed' || row.status === 'canceled' ? 'processingFailed' : row.status === 'ready' ? 'ready' : row.status === 'uploading' ? 'uploading' : row.status === 'processing' ? 'processing' : 'waiting'}`); }
 function rowError(row: FileRow): string {
   const key = ruleErrors.value.get(row.id);
-  return row.error || (key ? t(key) : '');
+  return renderError(row.error) || (key ? t(key) : '');
 }
 async function primaryAction() {
   if (filesDisabled.value) return;
@@ -447,14 +505,14 @@ function pickAuxiliary(event: Event, kind: 'image' | 'insert' | 'icc') {
   else if (kind === 'insert') insertTargetFile.value = file;
   else iccProfileFile.value = file;
 }
-onBeforeUnmount(() => { alive = false; abortController.abort(); clearTimeout(timer); releaseWait?.(); });
+onBeforeUnmount(() => { alive = false; abortController.abort(); clearTimeout(timer); releaseWait?.(); clearDragState(); });
 </script>
 
 <template>
   <TooltipProvider :delay-duration="150">
     <section class="batch-panel" :class="{ 'is-processing': running, 'is-completed': completed }"
-      :aria-busy="running || readingFolder" @dragenter.prevent="!filesDisabled && !draggingId && dragDepth++"
-      @dragleave.prevent="dragDepth = Math.max(0, dragDepth - 1)" @dragover.prevent @drop.prevent="drop">
+      :aria-busy="running || readingFolder" @dragenter.prevent="updateDragState($event)"
+      @dragleave.prevent="clearDragState($event)" @dragover.prevent="updateDragState($event)" @drop.prevent="drop" @dragend="clearDragState">
       <input ref="input" name="files" class="hidden-input" type="file" :accept="accept" multiple
         :disabled="filesDisabled" @change="changeFiles">
         <input ref="folderInput" name="folder" class="hidden-input" type="file" webkitdirectory multiple
@@ -508,7 +566,7 @@ onBeforeUnmount(() => { alive = false; abortController.abort(); clearTimeout(tim
                         </div>
                         <div v-if="completed && isTrialLicense" class="trial-banner">
                           <WarningIcon />
-                          <p>{{ t('batchTools.trialLimit') }}</p><a :href="upgradeUrl" target="_blank"
+                          <p>{{ t(trialLimitKey) }}</p><a :href="upgradeUrl" target="_blank"
                             rel="noopener noreferrer">{{ t('pdfToolDetail.upload.upgradeNow') }}</a>
                         </div>
                         <div class="list-toolbar">
@@ -549,7 +607,7 @@ onBeforeUnmount(() => { alive = false; abortController.abort(); clearTimeout(tim
                                 <th class="order-col"></th>
                                 <th>{{ t('batchTools.fileName') }}</th>
                                 <th>{{ t('batchTools.size') }}</th>
-                                <th>{{ t('batchTools.password') }}</th>
+                                <th>{{ t(toType === 'insert' ? 'batchTools.sourcePassword' : 'batchTools.password') }}</th>
                                 <th v-if="hasFilePageRange" class="page-range-cell">{{
                                   t('pdfToolDetail.upload.settings.pageRange') }}</th>
                                 <th v-if="started" class="status-cell">{{ t('batchTools.status') }}</th>
@@ -572,28 +630,28 @@ onBeforeUnmount(() => { alive = false; abortController.abort(); clearTimeout(tim
                                     :aria-pressed="selected?.id === row.id" @click="selectedId = row.id">
                                     <DocumentIcon /><span>{{ row.file.name }}</span>
                                   </button><small v-if="!started && (ruleErrors.get(row.id) || row.error)"
-                                    class="error">{{ row.error || t(ruleErrors.get(row.id)!) }}</small></td>
+                                    class="error">{{ rowError(row) }}</small></td>
                                 <td class="size-cell">{{ sizeLabel(row.file.size) }}</td>
                                 <td>
                                   <div class="password-field">
                                     <LockIcon /><input v-model="row.password"
                                       :type="row.showPassword ? 'text' : 'password'" maxlength="512" autocomplete="off"
-                                      :aria-label="`${t('batchTools.password')}: ${row.file.name}`"
+                                      :aria-label="`${t(toType === 'insert' ? 'batchTools.sourcePassword' : 'batchTools.password')}: ${row.file.name}`"
                                       :placeholder="t('batchTools.passwordPlaceholder')"
                                       :disabled="running || row.status === 'success'"><button
                                         type="button" :disabled="running"
-                                        :aria-label="`${t('batchTools.password')}: ${row.file.name}`"
+                                        :aria-label="`${t(toType === 'insert' ? 'batchTools.sourcePassword' : 'batchTools.password')}: ${row.file.name}`"
                                         :aria-pressed="row.showPassword" @click="row.showPassword = !row.showPassword">
                                         <EyeOffIcon />
                                       </button>
                                   </div>
                                 </td>
                                 <td v-if="hasFilePageRange" class="page-range-cell">
-                                  <input v-model="row.pageRange" class="file-page-range" type="text"
+                                  <PageRangeInput v-model="row.pageRange" input-class="file-page-range" size="compact"
                                     :aria-label="`${t('pdfToolDetail.upload.settings.pageRange')}: ${row.file.name}`"
                                     :aria-invalid="!!ruleErrors.get(row.id)"
                                     :aria-describedby="ruleErrors.get(row.id) ? `range-error-${row.id}` : undefined"
-                                    :placeholder="t('batchTools.stamp.allPages')" :disabled="locked">
+                                    :disabled="locked" />
                                     <span v-if="ruleErrors.get(row.id)" :id="`range-error-${row.id}`" class="sr-only">{{
                                       t(ruleErrors.get(row.id)!) }}</span>
                                 </td>
@@ -645,7 +703,7 @@ onBeforeUnmount(() => { alive = false; abortController.abort(); clearTimeout(tim
                       <h2>{{ t('batchTools.settings') }}</h2>
                       <fieldset :disabled="locked" @input="settingsTouched = true" @change="settingsTouched = true">
                         <StampSettings v-if="isStamp" v-model="stamp" :kind="stampKind" :disabled="locked" />
-                        <p v-else-if="isRemoval" class="removal-note">{{ t('batchTools.wholeDocumentRemoval') }}</p>
+                        <div v-else-if="isRemoval" class="removal-settings"><p class="removal-note">{{ t('batchTools.wholeDocumentRemoval') }}</p></div>
                         <SplitSettings v-else-if="toType === 'split'" v-model:mode="splitMode" v-model:ranges="splitValue"
                           v-model:count="splitCount" v-model:separator="splitSeparator"
                           :filename="selected?.file.name" :disabled="locked" />
@@ -826,20 +884,6 @@ summary:focus-visible {
   width: 24%;
 }
 
-.file-page-range {
-  width: 100%;
-  height: 26px;
-  min-width: 0;
-  border: 1px solid #dcdde1;
-  border-radius: 3px;
-  background: #fff;
-  padding: 2px 8px;
-  font-size: 12px;
-}
-
-.file-page-range[aria-invalid="true"] {
-  border-color: #d44040;
-}
 
 .documents-column {
   display: flex;

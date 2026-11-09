@@ -8,18 +8,33 @@ import {
   encryptPasswordValidationKey,
   imageDpiValidationKey,
   insertSourcePageRangeValidationKey,
+  insertBlankValidationKey,
   watermarkValidationKey,
 } from './param-schema';
 
 const pdf = { name: 'sample.pdf' } as File;
 
 describe('PDF standards request payload', () => {
-  it('builds SDK enum values, metadata, filename, and inline password', () => {
+  it.each(['pdfa1a', 'pdfa1b', 'pdfa2a', 'pdfa2u', 'pdfa2b', 'pdfx4', 'pdfe1'])(
+    'omits PDF/UA-only metadata for %s even after entering a title',
+    (standard) => {
+      const parameter = defaultParameter();
+      parameter.pdfStandard = standard;
+      parameter.outputTitle = 'Previous PDF/UA title';
+      parameter.outputLanguage = 'en_US';
+
+      const result = buildRequest({ fromType: 'pdf', toType: 'pdfa', parameter, password: '', files: [pdf] });
+
+      expect(result.payload).toEqual({ standard });
+    },
+  );
+
+  it('builds SDK enum values, metadata, and inline password without a custom filename', () => {
     const parameter = defaultParameter();
     parameter.pdfStandard = 'pdfua1';
     parameter.outputTitle = 'Accessible report';
     parameter.outputLanguage = 'en_US';
-    parameter.outputFileName = 'report.pdf';
+    parameter.outputFileName = 'ignored-custom-name.pdf';
 
     const result = buildRequest({
       fromType: 'pdf',
@@ -33,7 +48,6 @@ describe('PDF standards request payload', () => {
     expect(result.passwordField).toBe('inline');
     expect(result.payload).toEqual({
       standard: 'pdfua1',
-      outputFileName: 'report.pdf',
       uaConfig: { title: 'Accessible report', language: 'en_US' },
       password: 'secret',
     });
@@ -326,5 +340,42 @@ describe('compression image quality validation', () => {
     parameter.compressImageQuality = '101';
 
     expect(compressImageQualityValidationKey(parameter)).toBeNull();
+  });
+});
+
+
+describe('blank-page insertion validation', () => {
+  it('rejects zero, negative, fractional, and non-numeric values', () => {
+    const parameter = defaultParameter();
+    expect(insertBlankValidationKey({ ...parameter, insertCount: '0' })).toBe('pdfToolDetail.upload.errors.insertBlankParametersInvalid');
+    expect(insertBlankValidationKey({ ...parameter, insertWidth: '-1' })).toBe('pdfToolDetail.upload.errors.insertBlankParametersInvalid');
+    expect(insertBlankValidationKey({ ...parameter, insertCount: '1.5' })).toBe('pdfToolDetail.upload.errors.insertBlankParametersInvalid');
+    expect(insertBlankValidationKey({ ...parameter, insertHeight: '' })).toBe('pdfToolDetail.upload.errors.insertBlankParametersInvalid');
+  });
+
+  it('accepts positive integer count and dimensions', () => {
+    const parameter = defaultParameter();
+    expect(insertBlankValidationKey({ ...parameter, insertCount: '2', insertWidth: '595', insertHeight: '842' })).toBeNull();
+  });
+});
+
+
+describe('merge output filename', () => {
+  it('uses merged.pdf in either source order while retaining each source password and range', () => {
+    const first = { name: '1006.pdf' } as File;
+    const second = { name: '2021年员工旅游补助办法.pdf' } as File;
+    for (const files of [[first, second], [second, first]]) {
+      const parameter = defaultParameter();
+      parameter.mergePasswords = ['first-secret', 'second-secret'];
+      parameter.mergeFilePageRanges = ['1-2', '3'];
+      const { payload } = buildRequest({ fromType: 'pdf', toType: 'merge', parameter, password: '', files });
+      expect(payload).toMatchObject({ outputFileName: 'merged.pdf', passwords: parameter.mergePasswords, pageRanges: parameter.mergeFilePageRanges });
+    }
+  });
+
+  it('preserves an explicitly supplied merge result name', () => {
+    const parameter = defaultParameter();
+    parameter.outputFileName = ' 合并结果.pdf ';
+    expect(buildRequest({ fromType: 'pdf', toType: 'merge', parameter, password: '', files: [pdf, pdf] }).payload.outputFileName).toBe('合并结果.pdf');
   });
 });

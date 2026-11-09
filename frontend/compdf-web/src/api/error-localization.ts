@@ -179,6 +179,18 @@ const CONVERSION_NUMERIC_KEYS: Readonly<Record<number, string>> = {
   190999: 'internalError',
 };
 
+// Older conversion-engine responses use the SDK's small numeric error codes
+// (for example 4 = PDF_PAGE_ERROR) instead of normalized 190xxx codes.
+const LEGACY_CONVERSION_NUMERIC_KEYS: Readonly<Record<number, string>> = {
+  1: 'cancelled', 2: 'fileError', 3: 'pdfPasswordError', 4: 'pdfPageError',
+  5: 'pdfFormatError', 6: 'pdfSecurityError', 7: 'outOfMemory', 8: 'ioError',
+  9: 'compressError', 40: 'noTable', 41: 'ocrFailure', 60: 'convertingError',
+  80: 'invalidArgument', 81: 'invalidHandle', 82: 'invalidModelFormat',
+  83: 'modelFunctionUnsupported', 84: 'modelFormatUnsupported', 85: 'modelSdkMismatch',
+  86: 'imageDataEmpty', 87: 'imageDimensionsInvalid', 88: 'imageFormatUnsupported',
+  89: 'imageInvalid', 90: 'resourceExpired', 91: 'missingArgument',
+  92: 'licenseUnsupportedApi', 93: 'licenseMismatch', 94: 'invalidTable', 100: 'unknownError',
+};
 export function apiErrorTranslationKey(
   error: Pick<ApiError, 'type' | 'code' | 'errorCode' | 'message'>,
   source: ProcessingErrorSource = 'unknown',
@@ -189,6 +201,6 @@ export function apiErrorTranslationKey(
   if (typeof error.code !== 'number') return null;
   const resolvedSource = error.type ?? source;
   if (resolvedSource === 'pdf') return PDF_NUMERIC_KEYS[error.code] ?? null;
-  if (resolvedSource === 'conversion') return CONVERSION_NUMERIC_KEYS[error.code] ?? null;
+  if (resolvedSource === 'conversion') return CONVERSION_NUMERIC_KEYS[error.code] ?? LEGACY_CONVERSION_NUMERIC_KEYS[error.code] ?? null;
   return SHARED_NUMERIC_KEYS[error.code] ?? null;
 }

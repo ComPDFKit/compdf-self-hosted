@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { LoaderCircle, Upload } from 'lucide-vue-next';
 import { dashboardApi, type LicenseUpdateStatus } from '@/api/dashboard';
+import { licenseUpdateErrorKey } from '@/api/license-update-errors';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 const { t } = useI18n();
@@ -31,7 +32,7 @@ const phases = computed<Record<string, string>>(() => ({
 }));
 let timer: ReturnType<typeof setTimeout> | undefined;
 let stopped = false;
-function message(e: unknown) { return (e as { message?: string })?.message || t('license.update.requestFailed'); }
+function message(e: unknown) { return licenseUpdateErrorKey((e as { message?: string })?.message); }
 async function poll() {
   try { job.value = await dashboardApi.licenseUpdateStatus(); pollError.value = ''; }
   catch (e) { pollError.value = message(e); }
@@ -41,7 +42,7 @@ function select(event: Event) {
   const selected = (event.target as HTMLInputElement).files?.[0];
   if (!selected) return;
   if (!/^license[^/\\]*\.xml$/i.test(selected.name) || selected.size === 0 || selected.size > 65536) {
-    error.value = t('license.update.invalidFile');
+    error.value = 'license.update.invalidFile';
     (event.target as HTMLInputElement).value = ''; return;
   }
   file.value = selected; error.value = ''; dialog.value = true;
@@ -82,11 +83,11 @@ onUnmounted(() => { stopped = true; clearTimeout(timer); });
     <p v-if="!props.compact" class="text-xs text-stone-500">{{ t('license.update.description') }}</p>
     <div v-if="job" role="status" aria-live="polite" class="w-full min-w-0 space-y-1 break-words text-xs" :class="['FAILED','ROLLED_BACK','RECOVERY_REQUIRED'].includes(job.phase) ? 'text-amber-700' : 'text-blue-700'">
       <p>{{ phases[job.phase] || job.phase }}</p>
-      <p v-if="job.error" class="break-words">{{ job.error }}</p>
+      <p v-if="job.error" class="break-words">{{ t(licenseUpdateErrorKey(job.error)) }}</p>
       <p class="text-stone-400">{{ new Date(job.updatedAt).toLocaleString() }}</p>
     </div>
     <button v-if="needsRecovery" class="text-xs font-bold text-amber-700 underline" :disabled="submitting" @click="recover">{{ t('license.update.restore') }}</button>
-    <p v-if="error || pollError" role="alert" class="w-full min-w-0 break-words text-xs text-red-600">{{ error || pollError }}</p>
+    <p v-if="error || pollError" role="alert" class="w-full min-w-0 break-words text-xs text-red-600">{{ t(error || pollError) }}</p>
     <Dialog v-model:open="dialog">
       <DialogContent class="sm:max-w-lg rounded-2xl">
         <DialogHeader>
@@ -94,7 +95,7 @@ onUnmounted(() => { stopped = true; clearTimeout(timer); });
           <DialogDescription>{{ t('license.update.confirmDescription') }}</DialogDescription>
         </DialogHeader>
         <p class="text-sm break-all">{{ file?.name }}</p>
-        <p v-if="error" role="alert" class="text-sm text-red-600">{{ error }}</p>
+        <p v-if="error" role="alert" class="text-sm text-red-600">{{ t(error) }}</p>
         <DialogFooter>
           <button class="rounded-xl border px-4 py-2 text-sm" :disabled="submitting" @click="dialog = false">{{ t('license.update.cancel') }}</button>
           <button class="rounded-xl bg-[#2563eb] px-4 py-2 text-sm text-white disabled:opacity-50" :disabled="submitting" @click="install">{{ t('license.update.confirmAction') }}</button>

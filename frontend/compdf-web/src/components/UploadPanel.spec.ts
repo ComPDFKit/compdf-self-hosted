@@ -6,10 +6,16 @@ import { createI18n } from 'vue-i18n';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { batchApi, type BatchInfo, type BatchItemInfo } from '@/api/batch';
 import { apiClient } from '@/api/client';
-import { resolveTool, resolveConversionTypes, type Endpoint } from '@/config/convert-map';
+import { resolveTool, resolveConversionTypes, TOOL_SECTIONS, type Endpoint } from '@/config/convert-map';
 import { defaultStampParameter } from '@/config/stamp-schema';
 import type { UploadParameter } from '@/config/param-schema';
 import en from '@/i18n/locales/en.json';
+import zhcn from '@/i18n/locales/zh-cn.json';
+import zhtw from '@/i18n/locales/zh-tw.json';
+import ja from '@/i18n/locales/ja.json';
+import ko from '@/i18n/locales/ko.json';
+import th from '@/i18n/locales/th.json';
+import es from '@/i18n/locales/es.json';
 import { nameSplitOutputs, saveBlob, zipFiles } from '@/utils/result-archive';
 import UploadPanel from './UploadPanel.vue';
 
@@ -37,6 +43,7 @@ vi.mock('./ParamForm.vue', () => ({
   },
 }));
 
+const localeMessages = { en, 'zh-cn': zhcn, 'zh-tw': zhtw, ja, ko, th, es };
 const wrappers: VueWrapper[] = [];
 const batchId = 'batch-1';
 
@@ -87,13 +94,16 @@ function mountPanel(props: Partial<InstanceType<typeof UploadPanel>['$props']> =
     global: {
       renderStubDefaultSlot: true,
       stubs: {
+        PageRangeInput: false,
+        PopoverRoot: { inheritAttrs: false, template: '<slot />' },
+        PopoverAnchor: { inheritAttrs: false, template: '<slot />' },
         TooltipProvider: { inheritAttrs: false, template: '<slot />' },
         Tooltip: { inheritAttrs: false, template: '<slot />' },
         TooltipTrigger: { inheritAttrs: false, template: '<slot />' },
         TooltipContent: { template: '<span hidden><slot /></span>' },
       },
       // flatJson expands messages in place, so never hand it the imported fixture.
-      plugins: [createI18n({ legacy: false, locale: 'en', flatJson: true, messages: { en: { ...en } } })],
+      plugins: [createI18n({ legacy: false, locale: 'en', flatJson: true, messages: Object.fromEntries(Object.entries(localeMessages).map(([locale, messages]) => [locale, { ...messages }])) })],
     },
   });
   wrappers.push(wrapper);
@@ -247,7 +257,7 @@ describe('UploadPanel batch requests and results', () => {
     expect(rowFor(wrapper, first.name).get('input[type="password"]').attributes('disabled')).toBeDefined();
     await rowFor(wrapper, first.name).get(`button[aria-label="${en['batchTools.download']}"]`).trigger('click');
     await flushPromises();
-    expect(saveBlob).toHaveBeenLastCalledWith(output, 'success-rotated.pdf');
+    expect(saveBlob).toHaveBeenLastCalledWith(output, 'success.pdf');
 
     const retry = deferred<BatchInfo>();
     vi.mocked(batchApi.retry).mockReturnValueOnce(retry.promise);
@@ -273,7 +283,7 @@ describe('UploadPanel batch requests and results', () => {
     expect(rowFor(wrapper, second.name).text()).toContain(en['batchTools.processed']);
     await rowFor(wrapper, first.name).get(`button[aria-label="${en['batchTools.download']}"]`).trigger('click');
     await flushPromises();
-    expect(saveBlob).toHaveBeenLastCalledWith(output, 'success-rotated.pdf');
+    expect(saveBlob).toHaveBeenLastCalledWith(output, 'success.pdf');
     expect(vi.mocked(batchApi.downloadItem).mock.calls).toEqual([[success.itemId], [success.itemId]]);
   });
 
@@ -365,7 +375,7 @@ describe('UploadPanel retry regressions', () => {
       const form = data as FormData;
       expect(form.getAll('files').map((file) => (file as File).name)).toEqual([first.name, second.name]);
       expect(JSON.parse(form.get('request') as string)).toEqual({
-        pageRanges: ['1', '2-3'], outputFileName: 'first-valid.pdf',
+        pageRanges: ['1', '2-3'], outputFileName: 'merged.pdf',
         passwords: ['first-merge-password', 'second-merge-password'],
       });
     }
@@ -412,11 +422,11 @@ describe('PDF decoration backend integration', () => {
     expect(create).toMatchObject({ kind: 'pdf', op, idempotencyKey: expect.any(String) });
     expect(create.request).not.toHaveProperty('password');
     if (op.endsWith('/remove')) {
-      expect(create.request).toEqual({});
+      expect(create.request).toEqual({ pages: 'all' });
       expect(wrapper.findComponent({ name: 'ParamForm' }).exists()).toBe(false);
     } else {
       expect(create.request).toMatchObject({ pages: '1,3', fontName: 'Helvetica', fontSize: 12, textColor: '#000000' });
-      expect((create.request!.margin as { top: number }).top).toBeCloseTo(30 * 72 / 25.4);
+      expect((create.request!.margin as { top: number }).top).toBeCloseTo(6 * 72 / 25.4);
       if (op === 'headers-footers/add') expect(create.request).toMatchObject({ regions: { bottomCenter: 'Page <<1>>' }, pageOffset: 5, rules: 2 });
       else {
         expect(create.request).toMatchObject({ position: 'bottomRight', startNumber: 1, digits: 6, prefix: 'CASE-', suffix: '-A', pageOffset: 0 });
@@ -441,7 +451,7 @@ describe('PDF decoration backend integration', () => {
     vi.mocked(batchApi.downloadItem).mockResolvedValueOnce(response(output, 'second-result.pdf'));
     await rowFor(wrapper, second.name).get(`button[aria-label="${en['batchTools.download']}"]`).trigger('click');
     await flushPromises();
-    expect(saveBlob).toHaveBeenCalledWith(output, 'second-result.pdf');
+    expect(saveBlob).toHaveBeenCalledWith(output, second.name);
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 });
@@ -500,16 +510,80 @@ describe('per-file page ranges', () => {
     expect(apiClient.post).not.toHaveBeenCalled();
   });
 
-  it.each(['remove-headers-footers', 'remove-bates'])('hides the page range and defaults to whole-document removal in %s', async (slug) => {
+  it.each(['remove-headers-footers', 'remove-bates'])('shows a page range and sends the selected range in %s', async (slug) => {
     const tool = resolveTool(slug)!;
     const wrapper = mountPanel({ ...resolveConversionTypes(tool), toolSlug: slug, endpoint: tool.endpoint });
     await pickFiles(wrapper, [pdf('remove.pdf')]);
     expect(wrapper.find('.settings').exists()).toBe(false);
     expect(wrapper.get('.workspace-grid').classes()).toContain('without-settings');
-    expect(wrapper.find('.page-range-cell').exists()).toBe(false);
-    expect(wrapper.find('.file-page-range').exists()).toBe(false);
+    expect(wrapper.find('.page-range-cell').exists()).toBe(true);
+    expect(wrapper.find('.file-page-range').exists()).toBe(true);
+    await rowFor(wrapper, 'remove.pdf').get('.file-page-range').setValue('1,3');
     await start(wrapper);
-    expect(batchApi.create).toHaveBeenCalledWith(expect.objectContaining({ op: tool.endpoint.kind === 'pdf' ? tool.endpoint.op : '', request: {} }));
+    expect(batchApi.create).toHaveBeenCalledWith(expect.objectContaining({ op: tool.endpoint.kind === 'pdf' ? tool.endpoint.op : '', request: { pages: '1,3' } }));
+  });
+});
+
+describe('removal file page ranges', () => {
+  it.each([['', 'all'], ['ALL', 'all'], ['1、 3 - 5', '1,3-5']])('shows watermark ranges in the file table and submits %s as %s', async (input, pages) => {
+    const tool = resolveTool('remove-watermark')!;
+    const wrapper = mountPanel({ ...resolveConversionTypes(tool), toolSlug: tool.slug, endpoint: tool.endpoint });
+    await pickFiles(wrapper, [pdf('watermark.pdf')]);
+    expect(wrapper.find('.settings').exists()).toBe(false);
+    expect(wrapper.get('.workspace-grid').classes()).toContain('without-settings');
+    const range = rowFor(wrapper, 'watermark.pdf').get('.file-page-range');
+    expect(range.attributes('placeholder')).toBe(en['batchTools.stamp.customPagesPlaceholder']);
+    await range.setValue(input);
+    await start(wrapper);
+    expect(batchApi.create).toHaveBeenCalledWith(expect.objectContaining({
+      op: 'watermark/remove', request: expect.objectContaining({ pages, mode: 'tagged' }),
+    }));
+    expect(range.attributes('disabled')).toBeDefined();
+  });
+
+  it('rejects an invalid watermark range before sending requests', async () => {
+    const tool = resolveTool('remove-watermark')!;
+    const wrapper = mountPanel({ ...resolveConversionTypes(tool), toolSlug: tool.slug, endpoint: tool.endpoint });
+    await pickFiles(wrapper, [pdf('watermark.pdf')]);
+    await wrapper.get('.file-page-range').setValue('5-1');
+    expect(wrapper.get('.file-page-range').attributes('aria-invalid')).toBe('true');
+    expect(wrapper.get('.start-button').attributes('disabled')).toBeDefined();
+    await wrapper.get('.start-button').trigger('click');
+    expect(batchApi.create).not.toHaveBeenCalled();
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
+  it.each(['remove-watermark', 'remove-headers-footers', 'remove-bates'])('%s preserves distinct ranges and passwords after reorder and retry', async (slug) => {
+    const tool = resolveTool(slug)!;
+    const wrapper = mountPanel({ ...resolveConversionTypes(tool), toolSlug: slug, endpoint: tool.endpoint });
+    const first = pdf('first.pdf');
+    const second = pdf('second.pdf');
+    await pickFiles(wrapper, [first, second]);
+    await rowFor(wrapper, first.name).get('.file-page-range').setValue('1、3');
+    await setPassword(wrapper, first.name, 'first-password');
+    await setPassword(wrapper, second.name, 'second-password');
+    await rowFor(wrapper, second.name).get('.drag-handle').trigger('keydown', { key: 'ArrowUp' });
+    vi.mocked(apiClient.post)
+      .mockResolvedValueOnce(response(new Blob(['second']), 'second-result.pdf'))
+      .mockRejectedValueOnce(new Error('Temporary error'))
+      .mockResolvedValueOnce(response(new Blob(['first']), 'first-result.pdf'));
+    await start(wrapper);
+    expect(batchApi.create).not.toHaveBeenCalled();
+    const requests = vi.mocked(apiClient.post).mock.calls.map(([url, data]) => {
+      const form = data as FormData;
+      return { url, file: (form.get('file') as File).name, request: JSON.parse(form.get('request') as string) };
+    });
+    const mode = slug === 'remove-watermark' ? { mode: 'tagged' } : {};
+    expect(requests).toEqual([
+      { url: '/process/pdf/' + (tool.endpoint as { op: string }).op, file: second.name, request: expect.objectContaining({ pages: 'all', password: 'second-password', ...mode }) },
+      { url: '/process/pdf/' + (tool.endpoint as { op: string }).op, file: first.name, request: expect.objectContaining({ pages: '1,3', password: 'first-password', ...mode }) },
+    ]);
+    await rowFor(wrapper, first.name).get('button[aria-label="' + en['batchTools.retry'] + '"]').trigger('click');
+    await flushPromises();
+    const retry = vi.mocked(apiClient.post).mock.calls[2]![1] as FormData;
+    expect((retry.get('file') as File).name).toBe(first.name);
+    expect(JSON.parse(retry.get('request') as string)).toMatchObject({ pages: '1,3', password: 'first-password', ...mode });
+    expect(apiClient.post).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -580,10 +654,11 @@ describe('Split settings request integration', () => {
   });
 
   it.each([
-    ['custom', '1,2-3', 1, ['1', '2-3']],
-    ['every', '', 2, ['1-2', '3']],
-    ['equal', '', 2, ['1-2', '3']],
-  ] as const)('submits %s without requiring frontend PDF metadata', async (mode, ranges, count, expected) => {
+    ['custom', '1,2-3', 1, ['1', '2-3'], ' '],
+    ['custom', '1-3; 4-6; 8,10', 1, ['1-3', '4-6', '8,10'], '_'],
+    ['every', '', 2, ['1-2', '3'], ' '],
+    ['equal', '', 2, ['1-2', '3'], ' '],
+  ] as const)('submits %s without requiring frontend PDF metadata', async (mode, ranges, count, expected, separator) => {
     const wrapper = mountPanel({ toolSlug: 'split', toType: 'split', endpoint: { kind: 'pdf', op: 'split' } });
     const file = pdf('case.pdf');
     await pickFiles(wrapper, [file]);
@@ -593,7 +668,7 @@ describe('Split settings request integration', () => {
     settings.vm.$emit('update:mode', mode);
     settings.vm.$emit('update:ranges', ranges);
     settings.vm.$emit('update:count', count);
-    settings.vm.$emit('update:separator', ' ');
+    settings.vm.$emit('update:separator', separator);
     await flushPromises();
     const archive = new Blob(['archive']);
     vi.mocked(apiClient.post).mockResolvedValueOnce(response(archive, 'case.zip'));
@@ -604,7 +679,7 @@ describe('Split settings request integration', () => {
     const payload = JSON.parse((form as FormData).get('request') as string);
     if (mode === 'custom') expect(payload.ranges).toEqual(expected);
     else { expect(payload).toMatchObject({ splitMode: mode, splitCount: count }); expect(payload).not.toHaveProperty('ranges'); }
-    expect(nameSplitOutputs).toHaveBeenCalledWith(archive, file.name, ' ');
+    expect(nameSplitOutputs).toHaveBeenCalledWith(archive, file.name, separator);
     expect(batchApi.create).not.toHaveBeenCalled();
     expect(settings.props('disabled')).toBe(true);
   });
@@ -696,8 +771,8 @@ describe('UploadPanel download races', () => {
     expect(vi.mocked(batchApi.downloadItem).mock.calls).toEqual([[`item-${first.name}`], [`item-${second.name}`]]);
     expect(zipFiles).toHaveBeenCalledTimes(1);
     expect(vi.mocked(zipFiles).mock.calls[0]![0]).toEqual({
-      'first-original.pdf': new Uint8Array(await firstOutput.arrayBuffer()),
-      'second-original.pdf': new Uint8Array(await secondOutput.arrayBuffer()),
+      [first.name]: new Uint8Array(await firstOutput.arrayBuffer()),
+      [second.name]: new Uint8Array(await secondOutput.arrayBuffer()),
     });
     expect(saveBlob).toHaveBeenCalledTimes(1);
     expect(saveBlob).toHaveBeenCalledWith(archive, 'rotate-results.zip');
@@ -808,6 +883,28 @@ describe('settings validation timing', () => {
 });
 
 describe('UploadPanel synchronous PDF/A and local file validation', () => {
+  it('sends PDF/A files without a shared output filename and keeps each source name', async () => {
+    const wrapper = mountPanel({ toType: 'pdfa', toolSlug: 'pdf-to-pdfa', endpoint: { kind: 'pdf', op: 'pdfa' } });
+    const first = pdf('中文归档-一.pdf');
+    const second = pdf('中文归档-二.pdf');
+    await pickFiles(wrapper, [first, second]);
+    await pickFiles(wrapper, [new File(['ICC'], 'sRGB.icc')], 'input[accept=".icc,.icm"]');
+    vi.mocked(apiClient.post).mockResolvedValueOnce(response(new Blob(['first PDF/A']), first.name)).mockResolvedValueOnce(response(new Blob(['second PDF/A']), second.name));
+    await start(wrapper);
+    expect(vi.mocked(apiClient.post)).toHaveBeenCalledTimes(2);
+    for (const [index, file] of [first, second].entries()) {
+      const form = vi.mocked(apiClient.post).mock.calls[index]![1] as FormData;
+      expect(JSON.parse(form.get('request') as string)).not.toHaveProperty('outputFileName');
+      expect((form.get('file') as File).name).toBe(file.name);
+    }
+    await rowFor(wrapper, first.name).get('button[aria-label="' + en['batchTools.download'] + '"]').trigger('click');
+    await flushPromises();
+    expect(saveBlob).toHaveBeenLastCalledWith(expect.any(Blob), first.name);
+    await rowFor(wrapper, second.name).get('button[aria-label="' + en['batchTools.download'] + '"]').trigger('click');
+    await flushPromises();
+    expect(saveBlob).toHaveBeenLastCalledWith(expect.any(Blob), second.name);
+  });
+
   it('requires an ICC profile and sends PDF/A files individually through the synchronous endpoint', async () => {
     const wrapper = mountPanel({ toType: 'pdfa', toolSlug: 'pdf-to-pdfa', endpoint: { kind: 'pdf', op: 'pdfa' } });
     const first = pdf('first-archive.pdf');
@@ -845,15 +942,15 @@ describe('UploadPanel synchronous PDF/A and local file validation', () => {
       expect(data.has('password')).toBe(false);
       expect(JSON.parse(data.get('request') as string)).toMatchObject({
         standard: 'pdfa2b', password: index === 0 ? 'archive-one' : 'archive-two',
-        uaConfig: { title: 'Archive', language: 'en_US' },
       });
+      expect(JSON.parse(data.get('request') as string)).not.toHaveProperty('uaConfig');
       expect(config?.responseType).toBe('blob');
       expect(config?.signal?.aborted).toBe(false);
     }
     await rowFor(wrapper, first.name).get(`button[aria-label="${en['batchTools.download']}"]`).trigger('click');
     await flushPromises();
     expect(saveBlob).toHaveBeenCalledTimes(1);
-    expect(saveBlob).toHaveBeenCalledWith(firstOutput, 'first-pdfa.pdf');
+    expect(saveBlob).toHaveBeenCalledWith(firstOutput, first.name);
     expect(batchApi.downloadItem).not.toHaveBeenCalled();
   });
 
@@ -899,5 +996,352 @@ describe('UploadPanel synchronous PDF/A and local file validation', () => {
     expect(batchApi.create).not.toHaveBeenCalled();
     expect(batchApi.upload).not.toHaveBeenCalled();
     expect(apiClient.post).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('UploadPanel trial notices', () => {
+  const toPdfSlugs = ['word-to-pdf', 'png-to-pdf', 'rtf-to-pdf', 'excel-to-pdf', 'txt-to-pdf', 'csv-to-pdf', 'powerpoint-to-pdf', 'html-to-pdf', 'image-to-pdf'];
+  const pdfOperationSlugs = ['pdf-to-standard', 'merge', 'split', 'insert', 'delete', 'rotate', 'compress', 'add-watermark', 'remove-watermark', 'add-headers-footers', 'remove-headers-footers', 'add-bates', 'remove-bates', 'encrypt', 'decrypt'];
+
+  it.each(Object.keys(localeMessages))('shows the correct trial notice for every tool in %s', async (locale) => {
+    const contactUrl = 'https://example.com/upgrade';
+    vi.stubGlobal('COMPDF_CONFIG', { isFormalLicense: false, contactUrl });
+    const wrapper = mountPanel();
+    const file = pdf('trial.pdf');
+    await pickFiles(wrapper, [file]);
+    expect(wrapper.find('.trial-banner').exists()).toBe(false);
+    vi.mocked(batchApi.status).mockResolvedValue(batch('success', [item(file.name, 'success')]));
+    await start(wrapper);
+
+    const messages = localeMessages[locale as keyof typeof localeMessages];
+    wrapper.vm.$i18n.locale = locale;
+    for (const tool of TOOL_SECTIONS.flatMap((section) => section.tools)) {
+      await wrapper.setProps({ ...resolveConversionTypes(tool), toolSlug: tool.slug, endpoint: tool.endpoint, accept: tool.accept });
+      await flushPromises();
+      const key = toPdfSlugs.includes(tool.slug) ? 'batchTools.trialLimitToPdf'
+        : pdfOperationSlugs.includes(tool.slug) ? 'batchTools.trialLimitPdfOperations'
+        : 'batchTools.trialLimit';
+      const banner = wrapper.get('.trial-banner');
+      expect(banner.get('p').text(), tool.slug).toBe(messages[key]);
+      expect(banner.get('a').attributes('href')).toBe(contactUrl);
+      expect(banner.get('a').text()).toBe(messages['pdfToolDetail.upload.upgradeNow']);
+    }
+
+    // Existing results also follow live language changes.
+    const tool = resolveTool('rotate')!;
+    await wrapper.setProps({ ...resolveConversionTypes(tool), toolSlug: tool.slug, endpoint: tool.endpoint });
+    wrapper.vm.$i18n.locale = 'en';
+    await flushPromises();
+    expect(wrapper.get('.trial-banner p').text()).toBe(en['batchTools.trialLimitPdfOperations']);
+  });
+
+  it.each([true, undefined])('does not show trial notices when isFormalLicense is %s', async (isFormalLicense) => {
+    vi.stubGlobal('COMPDF_CONFIG', { isFormalLicense });
+    const wrapper = mountPanel();
+    const file = pdf('licensed.pdf');
+    await pickFiles(wrapper, [file]);
+    vi.mocked(batchApi.status).mockResolvedValue(batch('success', [item(file.name, 'success')]));
+    await start(wrapper);
+    expect(wrapper.find('.trial-banner').exists()).toBe(false);
+  });
+});
+
+describe('UploadPanel image format validation', () => {
+  const imageTools = TOOL_SECTIONS.flatMap((section) => section.tools)
+    .filter((tool) => tool.slug.startsWith('image-to-'));
+
+  it.each(imageTools)('rejects GIF before uploading in $slug', async (tool) => {
+    const wrapper = mountPanel({ ...resolveConversionTypes(tool), ...tool, toolSlug: tool.slug });
+    expect(wrapper.get('input[name="files"]').attributes('accept')).not.toContain('.gif');
+    expect(wrapper.get('.formats').text().toLowerCase()).not.toContain('gif');
+
+    await pickFiles(wrapper, [new File(['GIF89a'], 'animation.GIF', { type: 'image/gif' })]);
+
+    expect(hasRow(wrapper, 'animation.GIF')).toBe(false);
+    expect(wrapper.get('[role="alert"]').text()).toContain(en['batchTools.unsupportedFormat']);
+    expect(wrapper.find('.start-button').exists()).toBe(false);
+    expect(batchApi.create).not.toHaveBeenCalled();
+    expect(batchApi.upload).not.toHaveBeenCalled();
+    expect(apiClient.post).not.toHaveBeenCalled();
+  });
+
+  it('disables external drag-and-drop after a file has been added', async () => {
+    const wrapper = mountPanel({ toType: 'docx', toolSlug: 'pdf-to-word', endpoint: { kind: 'convert-target', target: 'docx' } });
+    const first = pdf('first.pdf');
+    const second = pdf('second.pdf');
+    await pickFiles(wrapper, [first]);
+
+    const dataTransfer = { types: ['Files'], items: [], files: [second] };
+    await wrapper.get('section').trigger('dragover', { dataTransfer });
+    await wrapper.get('section').trigger('drop', { dataTransfer });
+    await flushPromises();
+
+    expect(hasRow(wrapper, first.name)).toBe(true);
+    expect(hasRow(wrapper, second.name)).toBe(false);
+    expect(wrapper.find('.drop-overlay').exists()).toBe(false);
+  });
+  it('filters GIF from a dropped batch and still converts supported images', async () => {
+    const tool = resolveTool('image-to-word')!;
+    const wrapper = mountPanel({ ...resolveConversionTypes(tool), ...tool, toolSlug: tool.slug });
+    const gif = new File(['GIF89a'], 'animation.gif', { type: 'image/gif' });
+    const png = new File(['png'], 'photo.png', { type: 'image/png' });
+    vi.mocked(batchApi.status).mockResolvedValue(batch('success', [
+      item(png.name, 'success', { outputName: 'photo.docx' }),
+    ]));
+
+    await wrapper.get('section').trigger('drop', {
+      dataTransfer: { types: ['Files'], items: [], files: [gif, png] },
+    });
+    await flushPromises();
+    expect(hasRow(wrapper, gif.name)).toBe(false);
+    expect(hasRow(wrapper, png.name)).toBe(true);
+    expect(wrapper.get('[role="alert"]').text()).toContain(en['batchTools.unsupportedFormat']);
+
+    await start(wrapper);
+
+    expect(batchApi.upload).toHaveBeenCalledTimes(1);
+    expect(batchApi.upload).toHaveBeenCalledWith(batchId, png, '');
+    expect(rowFor(wrapper, png.name).text()).toContain(en['batchTools.processed']);
+  });
+});
+
+describe('UploadPanel insertion password errors', () => {
+  async function insertionPanel() {
+    const wrapper = mountPanel({ toType: 'insert', toolSlug: 'insert', endpoint: { kind: 'pdf', op: 'insert-from-pdf' } });
+    await pickFiles(wrapper, [pdf('main.pdf')]);
+    await pickFiles(wrapper, [pdf('insert.pdf')], 'input[type="file"][accept=".pdf"]:not([name])');
+    await setParameters(wrapper, { insertActionType: 'FROM_PDF', insertTargetPassword: 'insert-secret' });
+    await setPassword(wrapper, 'main.pdf', 'main-secret');
+    return wrapper;
+  }
+  it.each(['source', 'insert', 'both', undefined] as const)('shows the correct location for %s', async (passwordSource) => {
+    const wrapper = await insertionPanel();
+    vi.mocked(apiClient.post).mockRejectedValueOnce({ response: { data: new Blob([JSON.stringify({
+      type: 'pdf', code: 120002, errorCode: 'INVALID_PASSWORD', message: 'PDF password incorrect', traceId: 'trace', passwordSource,
+    })], { type: 'application/json' }) } });
+    await start(wrapper);
+    const message = rowFor(wrapper, 'main.pdf').text();
+    const template = en[`pdfToolDetail.upload.errors.insertPassword.${passwordSource ?? 'unknown'}`];
+    expect(message).toContain(template.replace('{sourceFile}', 'main.pdf').replace('{insertFile}', 'insert.pdf').replace('{reset}', en['batchTools.resetParameters']));
+    expect(message).not.toContain('main-secret'); expect(message).not.toContain('insert-secret');
+    expect(wrapper.get('thead').text()).toContain(en['batchTools.sourcePassword']);
+    const form = vi.mocked(apiClient.post).mock.calls[0]![1] as FormData;
+    expect(form.get('file')).toMatchObject({ name: 'main.pdf' });
+    expect(form.get('insertFile')).toMatchObject({ name: 'insert.pdf' });
+    expect(JSON.parse(form.get('request') as string)).toMatchObject({ targetPassword: 'main-secret', insertPassword: 'insert-secret' });
+  });
+  it.each(Object.keys(localeMessages).flatMap((locale) =>
+    (['source', 'insert', 'both', undefined] as const).map((passwordSource) => ({ locale, passwordSource })),
+  ))('keeps $passwordSource password errors localized when switching to $locale', async ({ locale, passwordSource }) => {
+    const wrapper = await insertionPanel();
+    const key = `pdfToolDetail.upload.errors.insertPassword.${passwordSource ?? 'unknown'}` as const;
+    vi.mocked(apiClient.post).mockRejectedValueOnce({ response: { data: new Blob([JSON.stringify({
+      type: 'pdf', code: 120002, errorCode: 'INVALID_PASSWORD', message: 'PDF password incorrect', passwordSource,
+    })], { type: 'application/json' }) } });
+    await start(wrapper);
+
+    for (const nextLocale of [locale, 'en', locale]) {
+      wrapper.vm.$i18n.locale = nextLocale;
+      await flushPromises();
+      const messages = localeMessages[nextLocale as keyof typeof localeMessages];
+      const expected = messages[key]
+        .replace('{sourceFile}', 'main.pdf').replace('{insertFile}', 'insert.pdf')
+        .replace('{reset}', messages['batchTools.resetParameters']);
+      const row = rowFor(wrapper, 'main.pdf');
+      expect(row.get('.status-badge').attributes('aria-label')).toBe(expected);
+      expect(row.text()).toContain(expected);
+      expect(row.text()).not.toContain('main-secret');
+      expect(row.text()).not.toContain('insert-secret');
+    }
+    expect(apiClient.post).toHaveBeenCalledTimes(1);
+  });
+  it('uses the corrected insert password after resetting settings', async () => {
+    const wrapper = await insertionPanel();
+    vi.mocked(apiClient.post).mockRejectedValueOnce({ response: { data: {
+      type: 'pdf', code: 120001, errorCode: 'PASSWORD_REQUIRED', message: 'Password required', passwordSource: 'insert',
+    } } });
+    await start(wrapper);
+    expect(rowFor(wrapper, 'main.pdf').text()).toContain('insert.pdf');
+    await buttonWithText(wrapper, en['batchTools.resetParameters']).trigger('click');
+    await setParameters(wrapper, { insertTargetPassword: 'corrected' });
+    vi.mocked(apiClient.post).mockResolvedValueOnce(response(new Blob(['%PDF result']), 'result.pdf'));
+    await start(wrapper);
+    const form = vi.mocked(apiClient.post).mock.calls[1]![1] as FormData;
+    expect(JSON.parse(form.get('request') as string)).toMatchObject({ targetPassword: 'main-secret', insertPassword: 'corrected' });
+    expect(rowFor(wrapper, 'main.pdf').text()).toContain(en['batchTools.processed']);
+  });
+  it('does not relabel non-password insertion errors', async () => {
+    const wrapper = await insertionPanel();
+    vi.mocked(apiClient.post).mockRejectedValueOnce({ response: { data: {
+      type: 'pdf', code: 110001, errorCode: 'INVALID_PAGE_RANGE', message: 'Bad range', passwordSource: 'insert',
+    } } });
+    await start(wrapper);
+    expect(rowFor(wrapper, 'main.pdf').text()).toContain(en['pdfToolDetail.upload.errors.apiCodes.invalidPageRange']);
+    expect(rowFor(wrapper, 'main.pdf').text()).not.toContain('Insert PDF Password');
+  });
+});
+
+
+describe('download identity across the complete tool catalog', () => {
+  it.each(TOOL_SECTIONS.flatMap((section) => section.tools))('$slug keeps reordered files bound to their own results', async (tool) => {
+    const types = resolveConversionTypes(tool);
+    const wrapper = mountPanel({ ...types, toolSlug: tool.slug, endpoint: tool.endpoint, accept: tool.accept });
+    const extension = tool.accept.split(',')[0]!;
+    const first = new File(['first source'], `第一份${extension}`, { lastModified: 1 });
+    const second = new File(['second source'], `第二份${extension}`, { lastModified: 1 });
+    await pickFiles(wrapper, [first, second]);
+    if (tool.slug === 'split') {
+      wrapper.getComponent({ name: 'SplitSettings' }).vm.$emit('update:mode', 'every');
+    } else if (tool.slug === 'add-watermark') {
+      const form = wrapper.getComponent({ name: 'WatermarkSettings' });
+      form.vm.$emit('update:parameter', { ...form.props('parameter'), watermarkText: 'Review' });
+    } else if (tool.slug === 'add-headers-footers') {
+      const value = defaultStampParameter('headers-footers');
+      value.regions.topCenter = 'Review';
+      wrapper.getComponent({ name: 'StampSettings' }).vm.$emit('update:modelValue', value);
+    } else if (tool.slug === 'delete') {
+      await setParameters(wrapper, { pageRanges: '1' });
+    } else if (tool.slug === 'encrypt') {
+      await setParameters(wrapper, { encryptUserPassword: 'output-password' });
+    } else if (tool.slug === 'pdf-to-standard') {
+      wrapper.getComponent({ name: 'ParamForm' }).vm.$emit('update:iccProfileFile', new File(['ICC'], 'sRGB.icc'));
+    }
+    await flushPromises();
+    await setPassword(wrapper, first.name, 'first-password');
+    await setPassword(wrapper, second.name, 'second-password');
+    await rowFor(wrapper, second.name).get('.drag-handle').trigger('keydown', { key: 'ArrowUp' });
+    expect(wrapper.findAll('.file-name').map((row) => row.text())).toEqual([second.name, first.name]);
+
+    const outputs = new Map([first, second].map((file) => [file.name, new Blob([`processed ${file.name}`])]));
+    const outputExtension = tool.endpoint.kind === 'convert-target' ? tool.endpoint.target
+      : tool.endpoint.kind === 'convert-type' ? tool.endpoint.type.split('/').pop()!
+      : tool.slug === 'split' ? 'zip' : 'pdf';
+    const downloadName = (file: File) => `${file.name.slice(0, file.name.lastIndexOf('.'))}.${outputExtension === 'markdown' ? 'md' : outputExtension}`;
+    const outputName = (file: File) => `operation-result.${downloadName(file).split('.').pop()}`;
+    const merged = new Blob(['merged output']);
+    vi.mocked(apiClient.post).mockImplementation(async (_url, data) => {
+      const form = data as FormData;
+      if (tool.slug === 'merge') return response(merged, 'merged.pdf');
+      const file = form.get('file') as File;
+      return response(outputs.get(file.name)!, outputName(file));
+    });
+    vi.mocked(nameSplitOutputs).mockImplementation(async (blob) => blob);
+    // Status order intentionally differs from the upload/list order.
+    vi.mocked(batchApi.status).mockResolvedValue(batch('success', [
+      item(first.name, 'success', { outputName: outputName(first), sequenceNo: 2 }),
+      item(second.name, 'success', { outputName: outputName(second), sequenceNo: 1 }),
+    ]));
+    vi.mocked(batchApi.downloadItem).mockImplementation(async (id) => {
+      const file = id === `item-${first.name}` ? first : second;
+      return response(outputs.get(file.name)!, outputName(file));
+    });
+    await start(wrapper);
+
+    // Reordering after processing is locked for all tools.
+    await rowFor(wrapper, first.name).get('.drag-handle').trigger('keydown', { key: 'ArrowUp' });
+    expect(wrapper.findAll('.file-name').map((row) => row.text())).toEqual([second.name, first.name]);
+    if (tool.slug === 'merge') {
+      const form = vi.mocked(apiClient.post).mock.calls[0]![1] as FormData;
+      expect(form.getAll('files').map((file) => (file as File).name)).toEqual([second.name, first.name]);
+      expect(JSON.parse(form.get('request') as string)).toMatchObject({ outputFileName: 'merged.pdf', passwords: ['second-password', 'first-password'] });
+      await buttonWithText(wrapper, en['batchTools.downloadAll']).trigger('click');
+      await flushPromises();
+      expect(saveBlob).toHaveBeenLastCalledWith(merged, 'merged.pdf');
+      expect(zipFiles).not.toHaveBeenCalled();
+      return;
+    }
+
+    if (vi.mocked(batchApi.upload).mock.calls.length) {
+      expect(vi.mocked(batchApi.upload).mock.calls.map((args) => [args[1].name, args[2]])).toEqual([
+        [second.name, 'second-password'], [first.name, 'first-password'],
+      ]);
+    } else {
+      expect(vi.mocked(apiClient.post).mock.calls.map((args) => ((args[1] as FormData).get('file') as File).name)).toEqual([second.name, first.name]);
+    }
+    for (const file of [first, second]) {
+      await rowFor(wrapper, file.name).get(`button[aria-label="${en['batchTools.download']}"]`).trigger('click');
+      await flushPromises();
+      expect(saveBlob).toHaveBeenLastCalledWith(outputs.get(file.name), downloadName(file));
+    }
+    const archive = new Blob(['ZIP']);
+    vi.mocked(zipFiles).mockResolvedValueOnce(archive);
+    await buttonWithText(wrapper, en['batchTools.downloadAll']).trigger('click');
+    await flushPromises();
+    const entries = vi.mocked(zipFiles).mock.calls[0]![0];
+    expect(Object.keys(entries)).toEqual([downloadName(second), downloadName(first)]);
+    for (const file of [first, second]) expect(new TextDecoder().decode(entries[downloadName(file)])).toBe(`processed ${file.name}`);
+    expect(saveBlob).toHaveBeenLastCalledWith(archive, `${tool.slug}-results.zip`);
+  });
+});
+
+describe('missing result metadata and archive collisions', () => {
+  it('keeps an explicitly chosen name from the processing request', async () => {
+    const wrapper = mountPanel();
+    const file = pdf('956.pdf');
+    const output = new Blob(['rotated PDF'], { type: 'application/pdf' });
+    await pickFiles(wrapper, [file]);
+    await setParameters(wrapper, { outputFileName: '指定名称.pdf' });
+    vi.mocked(batchApi.status).mockResolvedValue(batch('success', [item(file.name, 'success', { outputName: 'rotated.pdf' })]));
+    vi.mocked(batchApi.downloadItem).mockResolvedValue(response(output, 'rotated.pdf'));
+    await start(wrapper);
+    await setParameters(wrapper, { outputFileName: 'later.pdf' });
+    await rowFor(wrapper, file.name).get(`button[aria-label="${en['batchTools.download']}"]`).trigger('click');
+    await flushPromises();
+    expect(saveBlob).toHaveBeenLastCalledWith(output, '指定名称.pdf');
+  });
+
+  it.each([
+    ['pdf-to-word', '转换结果.docx', 'application/octet-stream'],
+    ['pdf-to-image', '转换图片.zip', 'application/zip'],
+    ['pdf-to-markdown', '转换结果.md', 'text/markdown'],
+    ['word-to-pdf', '转换结果.pdf', 'application/pdf'],
+  ])('%s keeps the source basename and the actual output extension', async (slug, filename, mime) => {
+    const tool = resolveTool(slug)!;
+    const wrapper = mountPanel({ ...resolveConversionTypes(tool), toolSlug: slug, endpoint: tool.endpoint, accept: tool.accept });
+    const file = new File(['source'], `source${tool.accept.split(',')[0]}`);
+    const output = new Blob(['converted'], { type: mime });
+    vi.mocked(batchApi.status).mockResolvedValue(batch('success', [item(file.name, 'success')]));
+    vi.mocked(batchApi.downloadItem).mockResolvedValue(response(output, filename));
+    vi.mocked(zipFiles).mockResolvedValue(new Blob(['ZIP']));
+    await pickFiles(wrapper, [file]);
+    await start(wrapper);
+    await rowFor(wrapper, file.name).get(`button[aria-label="${en['batchTools.download']}"]`).trigger('click');
+    await flushPromises();
+    const expected = `source.${filename.split('.').pop()}`;
+    expect(saveBlob).toHaveBeenLastCalledWith(output, expected);
+    await buttonWithText(wrapper, en['batchTools.downloadAll']).trigger('click');
+    await flushPromises();
+    expect(Object.keys(vi.mocked(zipFiles).mock.calls[0]![0])).toEqual([expected]);
+  });
+
+  it('uses the output format if both metadata and headers omit the filename', async () => {
+    const wrapper = mountPanel({ toType: 'png', toolSlug: 'pdf-to-image', endpoint: { kind: 'convert-target', target: 'png' } });
+    const file = pdf('report.pdf');
+    const output = new Blob(['image archive'], { type: 'application/zip' });
+    const download = response(output, 'unused');
+    delete download.headers['content-disposition'];
+    vi.mocked(batchApi.status).mockResolvedValue(batch('success', [item(file.name, 'success', { outputName: '' })]));
+    vi.mocked(batchApi.downloadItem).mockResolvedValue(download);
+    await pickFiles(wrapper, [file]);
+    await start(wrapper);
+    await rowFor(wrapper, file.name).get(`button[aria-label="${en['batchTools.download']}"]`).trigger('click');
+    await flushPromises();
+    expect(saveBlob).toHaveBeenLastCalledWith(output, 'report.zip');
+  });
+
+  it('keeps different source names when the server reuses an operation filename', async () => {
+    const wrapper = mountPanel();
+    const files = [pdf('first.pdf'), pdf('second.pdf'), pdf('third.pdf')];
+    vi.mocked(batchApi.status).mockResolvedValue(batch('success', files.map((file, index) => item(file.name, 'success', { outputName: index === 0 ? '3-report.pdf' : 'report.pdf' }))));
+    vi.mocked(batchApi.downloadItem).mockImplementation(async (id) => response(new Blob([id]), 'ignored.pdf'));
+    vi.mocked(zipFiles).mockResolvedValue(new Blob(['ZIP']));
+    await pickFiles(wrapper, files);
+    await start(wrapper);
+    await buttonWithText(wrapper, en['batchTools.downloadAll']).trigger('click');
+    await flushPromises();
+    const entries = vi.mocked(zipFiles).mock.calls[0]![0];
+    expect(Object.keys(entries)).toEqual(['first.pdf', 'second.pdf', 'third.pdf']);
+    expect(Object.values(entries).map((bytes) => new TextDecoder().decode(bytes))).toEqual(files.map((file) => `item-${file.name}`));
   });
 });

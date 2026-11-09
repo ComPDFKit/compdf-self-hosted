@@ -31,6 +31,7 @@ export interface NormalizedError {
     errorCode: string;
     message: string;
     traceId: string;
+    passwordSource?: 'source' | 'insert' | 'both';
   };
 }
 
@@ -88,6 +89,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         errorCode,
         message: englishUpstreamMessage(err.message, errorCode, err.source, code),
         traceId: err.traceId ?? createTraceId(),
+        ...(err.passwordSource ? { passwordSource: err.passwordSource } : {}),
       },
     };
   }

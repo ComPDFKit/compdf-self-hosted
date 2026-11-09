@@ -39,7 +39,7 @@ export function defaultStampParameter(kind: StampKind): StampParameter {
     fontSize: 12,
     textColor: '#000000',
     textOpacity: 1,
-    marginMm: { top: 30, bottom: 30, left: 30, right: 30 },
+    marginMm: { top: 6, bottom: 6, left: 6, right: 6 },
     pageOffset: kind === 'bates' ? 0 : 1,
     startNumber: 1,
     digits: 6,

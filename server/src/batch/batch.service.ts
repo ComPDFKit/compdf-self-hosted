@@ -11,7 +11,7 @@ import { PdfSdkClient, SdkFileResult, MulterFile } from '../clients/pdf-sdk.clie
 import { ConversionResult, ConversionService } from '../conversion/conversion.service';
 import { ErrorCode } from '../common/errors/error-codes';
 import { UpstreamSdkError } from '../common/errors/upstream-sdk.error';
-import { normalizeUploadedFilename, parseFilenameFromHeader, sanitizeFilename } from '../common/utils/filename';
+import { normalizeUploadedFilename, parseFilenameFromHeader, resultFileExtension, sanitizeFilename } from '../common/utils/filename';
 import { BatchKind, CreateBatchDto } from './batch.dto';
 import { PDF_DECORATION_OPS, validateDecorationRequest } from '../pdf/decoration-validation';
 import { validateEncryptRequest } from '../pdf/encryption-validation';
@@ -643,8 +643,8 @@ function outputFilename(result: SdkFileResult | ConversionResult, sourceName: st
   const header = (result as SdkFileResult).headers?.['content-disposition'];
   const upstream = header ? parseFilenameFromHeader(header) : (result as ConversionResult).filename;
   if (upstream) return sanitizeFilename(upstream, `${sourceName}-result`);
-  if (op === 'convert-to-pdf') return `${sourceName.replace(/\.[^.]*$/, '')}.pdf`;
-  const ext = target ?? type?.split('/').pop();
+  const ext = resultFileExtension(contentTypeOf(result),
+    op === 'split' ? 'zip' : op === 'convert-to-pdf' ? 'pdf' : target ?? type?.split('/').pop());
   return sanitizeFilename(ext ? `${sourceName.replace(/\.[^.]*$/, '')}.${ext === 'markdown' ? 'md' : ext}` : sourceName, `${op}-result`);
 }
 

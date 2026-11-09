@@ -38,7 +38,8 @@ export interface ToolSection {
   tools: ToolDef[];
 }
 
-const IMG = '.png,.jpg,.jpeg,.jp2000,.bmp,.tiff,.webp,.gif';
+// GIF input is rejected by the conversion engine; keep it out of upload hints and validation.
+const IMG = '.png,.jpg,.jpeg,.jp2,.jp2000,.bmp,.tiff,.webp';
 
 const ALL: ToolDef[] = [
   // PDF to other formats.

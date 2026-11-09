@@ -44,34 +44,46 @@
 
 ## 功能
 
-![Tools](images/tools.png)
+![feature](images/tools.png)
 
-### 1. PDF 工具中心
+
 
 ComPDF Self-Hosted 提供可直接在瀏覽器中使用的**開源 PDF 編輯器、開源 PDF 轉檔工具與開源圖片轉檔**工具中心。
 
-| 類別 | 功能 |
-| --- | --- |
-| PDF 編輯 | 合併、分割、旋轉、插入／刪除／擷取頁面、壓縮、新增／移除浮水印、加密／解密、新增／移除頁首／頁尾及貝茲編碼 |
-| PDF 轉其他格式 | Word、Excel、PowerPoint、圖片、HTML、TXT、CSV、RTF、JSON、可搜尋 PDF、OFD、Markdown 與 PDF/A |
-| 其他格式轉 PDF | Word、Excel、PowerPoint、HTML、TXT、CSV、RTF 與 PNG |
-| 圖片轉其他格式 | Word、Excel、PowerPoint、HTML、CSV、TXT、RTF、JSON 與 PDF |
+| 類別         | 功能                                                                          |
+| ---------- | --------------------------------------------------------------------------- |
+| 批次處理       | 支援批次上傳與處理檔案                                                                 |
+| MCP Server | 支援以 MCP 方式串接第三方 Agent 平台進行檔案處理                                              |
+| PDF 編輯     | 合併、拆分、旋轉、插入、刪除、以及提取 PDF 頁面、壓縮 PDF 檔案                                        |
+| PDF 安全     | 為 PDF 檔案新增浮水印、移除浮水印、加密、解密、新增頁首頁尾、移除頁首頁尾、新增貝茲碼、移除貝茲碼                         |
+| PDF 轉其他格式  | Word、Excel、PowerPoint、圖片、HTML、TXT、CSV、RTF、JSON、可搜尋 PDF、OFD、Markdown 與 PDF/A |
+| 其他格式轉 PDF  | Word、Excel、PowerPoint、HTML、TXT、CSV、RTF 與 PNG                                |
+| 圖片轉其他格式    | Word、Excel、PowerPoint、HTML、CSV、TXT、RTF、JSON 與 PDF                           |
 
 可用格式與處理限制取決於部署的 App 映像和 SDK 授權。儲存庫程式碼開源；商業 PDF／Conversion SDK 與有效執行授權另行提供。
 
-### 2. Dashboard 管理控制台
+### Dashboard 管理控制台
 
 ComPDF Self-Hosted 提供統一的管理控制台，用於查看 API Key、API 呼叫情況與 License 狀態，並支援操作紀錄稽核、帳號管理及系統基本設定等核心功能。
+
+使用初始帳號與密碼即可登入 Dashboard，登入後請先變更使用者名稱與密碼。
+
+- 初始帳號：admin
+
+- 初始密碼：admin
 
 ![Dashboard](images/dashboard.png)
 
 * 總覽面板：顯示 API Key 詳細資訊、API 呼叫資料、授權（License）範圍及狀態等資訊。
-* 操作日誌：追蹤、搜尋，並匯出所有操作日誌
-* 帳號管理：設定使用者名稱與密碼
-* 系統設定：設定系統名稱、標誌與主題色
-* License 管理與產品更新：檢視執行授權狀態，管理經管理員確認的產品更新。
+* License 管理：檢視本產品的 License 檔案、執行狀態及版本權限；支援一鍵替換 License 檔案並完成產品升級。
+* API Key 管理：檢視並複製您的 API Key 和執行狀態，以授權第三方系統、服務或 Agents 呼叫 API 進行文件處理。
+* MCP Server：取得各 Agent 平台的設定程式碼與 API Key，串接 Agent 平台，為 AI 提供專業的 PDF 處理能力。
+* 操作日誌：追蹤、搜尋，並匯出所有操作日誌。
+* 產品更新：查看最新版本詳情、下載新版本並啟用。
+* 帳號管理：設定使用者名稱與密碼。
+* 系統設定：設定系統名稱、標誌與主題色。
 
-### 3. 批次處理與 API 串接
+### 批次處理與 API 串接
 
 - 批次檔案上傳、個別檔案密碼、循序處理、狀態查詢、失敗重試與 ZIP 下載。
 - REST API：串接內部系統與文件自動化流程。
@@ -84,6 +96,8 @@ ComPDF Self-Hosted 提供統一的管理控制台，用於查看 API Key、API �
 以下三種部署方式皆受支援。請預留映像、資料與備份空間。
 預設 Infra/App 映像適用於 `linux/amd64`。Docker 方式需要 Docker Engine 或 Linux
 容器模式的 Docker Desktop，以及支援 `up --wait --wait-timeout` 的 Compose v2。
+
+**部署時會自動產生 License，無需另外提供；如需升級至付費版本，請[聯絡銷售](https://www.compdf.com/contact-sales?utm_source=github_ai_seLfhosted_oldopen_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_oldopen_tw&ref_platform_id=github_compdf_tw)購買，並在 Dashboard 的 License 管理模組中替換即可。**
 
 ### 方式一：指令碼安裝（免複製儲存庫）
 
@@ -180,11 +194,11 @@ Compose 專案名稱並保留持久化磁碟區。基礎 Compose 發佈 8080 連
 
 ### 存取與首次設定
 
-| 入口 | 預設位址 |
-| --- | --- |
-| ComPDF Web | `http://localhost:8080/` |
-| Dashboard | `http://localhost:8080/admin` |
-| 健康狀態 | `http://localhost:8080/api/v1/status` |
+| 入口         | 預設位址                                  |
+| ---------- | ------------------------------------- |
+| ComPDF Web | `http://localhost:8080/`              |
+| Dashboard  | `http://localhost:8080/admin`         |
+| 健康狀態       | `http://localhost:8080/api/v1/status` |
 
 遠端 Docker 主機請將 `localhost` 替換為受控入口。首次初始化帳號為 `admin / admin`，
 登入後請修改密碼。對外使用前設定 HTTPS、CORS 與存取控制。
@@ -234,14 +248,14 @@ docker compose --env-file .env up -d --wait --wait-timeout 600
 Infra 提供 MySQL、Redis 與物件儲存；App 執行 PDF／轉換 SDK；Server 提供介面、
 批次工作、MCP 與封裝前端；選用 Updater 執行經確認的更新。本儲存庫不包含商業 SDK 原始碼。
 
-| 路徑 | 用途 |
-| --- | --- |
-| `frontend/compdf-web/` | Vue 3 + Vite 工具中心與 Dashboard |
-| `server/` | NestJS + TypeScript 後端 |
-| `updater/` | Go 更新器、發佈器與容器啟動邏輯 |
-| `deploy/`, `helm/` | 實際維護的部署工具 |
-| `deployment/`, `release/`, `migrations/` | 設定規範、版本與正式遷移 |
-| `configs/` | 執行設定與初始資料庫 SQL |
+| 路徑                                       | 用途                           |
+| ---------------------------------------- | ---------------------------- |
+| `frontend/compdf-web/`                   | Vue 3 + Vite 工具中心與 Dashboard |
+| `server/`                                | NestJS + TypeScript 後端       |
+| `updater/`                               | Go 更新器、發佈器與容器啟動邏輯            |
+| `deploy/`, `helm/`                       | 實際維護的部署工具                    |
+| `deployment/`, `release/`, `migrations/` | 設定規範、版本與正式遷移                 |
+| `configs/`                               | 執行設定與初始資料庫 SQL               |
 
 ## 原始碼開發
 
@@ -275,12 +289,12 @@ App 與 Infra 仍使用設定中的映像。這些原始碼命令僅適用於完
 
 ## 其他部署檔案
 
-| 方案 | 適用情境 | 檔案 |
-| --- | --- | --- |
-| Kubernetes / Helm | 使用隨附 Chart 進行叢集部署 | [Chart](helm/compdf-self-hosted/) |
-| 原始碼／二進位 | Linux Server/UI 受控部署；App/Infra 獨立提供 | [封裝指令碼](deploy/binary/) |
-| Nginx / Keepalived | TLS 與入口可用性；應用程式與資料高可用需另行設計 | [入口設定](deploy/nginx/) |
-| 離線交付 | 映像匯出與簽章離線安裝包 | [離線工具](deploy/offline/) |
+| 方案                 | 適用情境                                | 檔案                                |
+| ------------------ | ----------------------------------- | --------------------------------- |
+| Kubernetes / Helm  | 使用隨附 Chart 進行叢集部署                   | [Chart](helm/compdf-self-hosted/) |
+| 原始碼／二進位            | Linux Server/UI 受控部署；App/Infra 獨立提供 | [封裝指令碼](deploy/binary/)           |
+| Nginx / Keepalived | TLS 與入口可用性；應用程式與資料高可用需另行設計          | [入口設定](deploy/nginx/)             |
+| 離線交付               | 映像匯出與簽章離線安裝包                        | [離線工具](deploy/offline/)           |
 
 Nginx 屬於入口層；線上／離線屬於交付方式，可以與 Compose 或 Kubernetes 組合使用。
 Compose 更新器不管理 Kubernetes 或 Apple container。
@@ -293,17 +307,18 @@ Compose 更新器不管理 Kubernetes 或 Apple container。
 
 [請聯絡銷售團隊](https://www.compdf.com/contact-sales?utm_source=github_ai_seLfhosted_oldopen_tw&utm_medium=referral&utm_campaign=github_ai_seLfhosted_oldopen_tw&ref_platform_id=github_compdf_tw)，將方案升級至 **Enterprise** 版。
 
-| 功能  | 免費版 | 企業版 |
-| --- | --- | --- |
-| PDF 編輯 | ✅   | ✅   |
-| PDF 轉檔 | ✅   | ✅   |
-| Web 介面 | ✅   | ✅   |
+| 功能              | 免費版 | 企業版 |
+| --------------- | --- | --- |
+| PDF 編輯          | ✅   | ✅   |
+| PDF 轉檔          | ✅   | ✅   |
+| Web 介面          | ✅   | ✅   |
 | Dashboard 管理控制台 | ✅   | ✅   |
-| 輸出文件不含浮水印 | ❌   | ✅   |
-| 不限制頁數 | ❌   | ✅   |
-| 自訂併發數 | ❌   | ✅   |
-| 商業授權 | ❌   | ✅   |
-| 技術支援 | ❌   | ✅   |
+| 批次處理            | ✅   |     |
+| 輸出文件不含浮水印       | ❌   | ✅   |
+| 不限制頁數           | ❌   | ✅   |
+| 自訂併發數           | ❌   | ✅   |
+| 商業授權            | ❌   | ✅   |
+| 技術支援            | ❌   | ✅   |
 
 <a id="documentation"></a>
 

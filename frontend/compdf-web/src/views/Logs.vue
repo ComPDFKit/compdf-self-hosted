@@ -8,11 +8,12 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import LocalizedDateTimePicker from '@/components/LocalizedDateTimePicker.vue';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const logs = ref<LogEntry[]>([]);
 const total = ref(0);
@@ -24,6 +25,8 @@ const searchTerm = ref('');
 const typeFilter = ref<'ALL' | LogType>('ALL');
 const levelFilter = ref<'ALL' | LogLevel>('ALL');
 const timeRange = ref<LogTimeRange>('1h');
+const startTime = ref('');
+const endTime = ref('');
 const selectedLog = ref<LogEntry | null>(null);
 const exporting = ref(false);
 const exportConfirmOpen = ref(false);
@@ -33,6 +36,8 @@ const query = computed<LogsQuery>(() => ({
   logType: typeFilter.value === 'ALL' ? undefined : typeFilter.value,
   level: levelFilter.value === 'ALL' ? undefined : levelFilter.value,
   timeRange: timeRange.value,
+  startTime: timeRange.value === 'custom' && startTime.value ? new Date(startTime.value).toISOString() : undefined,
+  endTime: timeRange.value === 'custom' && endTime.value ? new Date(endTime.value).toISOString() : undefined,
   page: page.value,
   pageSize,
 }));
@@ -63,6 +68,18 @@ function updateLevel(value: unknown) {
 function updateTimeRange(value: unknown) {
   if (typeof value !== 'string') return;
   timeRange.value = value as LogTimeRange;
+  if (timeRange.value !== 'custom') applySearch();
+}
+
+const customRangeError = computed(() => {
+  if (timeRange.value !== 'custom') return '';
+  if (!startTime.value || !endTime.value) return t('logs.range.bothRequired');
+  if (new Date(startTime.value).getTime() > new Date(endTime.value).getTime()) return t('logs.range.invalid');
+  return '';
+});
+
+function applyCustomRange() {
+  if (customRangeError.value) return;
   applySearch();
 }
 
@@ -206,6 +223,38 @@ function traceText(log: LogEntry): string {
             <SelectItem class="text-xs" value="custom">{{ t('logs.range.custom') }}</SelectItem>
           </SelectContent>
         </Select>
+        <div v-if="timeRange === 'custom'" class="flex flex-wrap items-end gap-2">
+          <label class="flex flex-col gap-1 text-[11px] font-semibold text-brand-secondary">
+            {{ t('logs.range.start') }}
+            <LocalizedDateTimePicker
+              v-model="startTime"
+              :locale="locale"
+              :placeholder="t('logs.datePicker.placeholder')"
+              :clear-label="t('logs.datePicker.clear')"
+              :today-label="t('logs.datePicker.today')"
+              :previous-month-label="t('logs.datePicker.previousMonth')"
+              :next-month-label="t('logs.datePicker.nextMonth')"
+              :hour-label="t('logs.datePicker.hour')"
+              :minute-label="t('logs.datePicker.minute')"
+            />
+          </label>
+          <label class="flex flex-col gap-1 text-[11px] font-semibold text-brand-secondary">
+            {{ t('logs.range.end') }}
+            <LocalizedDateTimePicker
+              v-model="endTime"
+              :locale="locale"
+              :placeholder="t('logs.datePicker.placeholder')"
+              :clear-label="t('logs.datePicker.clear')"
+              :today-label="t('logs.datePicker.today')"
+              :previous-month-label="t('logs.datePicker.previousMonth')"
+              :next-month-label="t('logs.datePicker.nextMonth')"
+              :hour-label="t('logs.datePicker.hour')"
+              :minute-label="t('logs.datePicker.minute')"
+            />
+          </label>
+          <button type="button" :disabled="!!customRangeError" class="h-9 rounded-xl bg-brand-primary px-3 text-xs font-bold text-white disabled:opacity-50" @click="applyCustomRange">{{ t('logs.range.apply') }}</button>
+          <p v-if="customRangeError" class="basis-full text-xs text-brand-error" role="alert">{{ customRangeError }}</p>
+        </div>
       </div>
       <button
         @click="exportConfirmOpen = true"

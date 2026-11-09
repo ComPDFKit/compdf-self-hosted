@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 
 import { describe, expect, it } from 'vitest';
-import { parseContentDispositionFilename } from './client';
+import { parseContentDispositionFilename, toApiError } from './client';
 
 describe('Content-Disposition filename parsing', () => {
   it('prefers the UTF-8 filename over the ASCII fallback', () => {
@@ -11,5 +11,18 @@ describe('Content-Disposition filename parsing', () => {
     expect(parseContentDispositionFilename(disposition)).toBe(
       '模板15(新版)-deleted-pages.pdf',
     );
+  });
+});
+
+
+describe('password error provenance normalization', () => {
+  it.each(['source', 'insert', 'both'] as const)('preserves %s in JSON and Blob responses', async (passwordSource) => {
+    const data = { type: 'pdf', code: 120002, errorCode: 'INVALID_PASSWORD', message: 'Wrong password', passwordSource };
+    for (const body of [data, new Blob([JSON.stringify(data)], { type: 'application/json' })]) {
+      await expect(toApiError({ response: { data: body } })).resolves.toMatchObject(data);
+    }
+  });
+  it('ignores unrecognized locations', async () => {
+    await expect(toApiError({ response: { data: { message: 'Wrong password', passwordSource: 'unknown-field' } } })).resolves.toMatchObject({ passwordSource: undefined });
   });
 });

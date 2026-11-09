@@ -10,12 +10,22 @@ function mountSettings(kind: StampKind) {
   let wrapper: VueWrapper<InstanceType<typeof StampSettings>>;
   wrapper = shallowMount(StampSettings, {
     props: { kind, modelValue: defaultStampParameter(kind), 'onUpdate:modelValue': (value) => wrapper.setProps({ modelValue: value }) },
-    global: { plugins: [createI18n({ legacy: false, locale: 'en', flatJson: true, messages: { en: { ...en } } })] },
+    global: { stubs: { PageRangeInput: false, PopoverRoot: { inheritAttrs: false, template: '<slot />' }, PopoverAnchor: { inheritAttrs: false, template: '<slot />' } }, plugins: [createI18n({ legacy: false, locale: 'en', flatJson: true, messages: { en: { ...en } } })] },
   });
   return wrapper;
 }
 
 describe('stamp settings controls', () => {
+  it.each(['headers-footers', 'bates'] as const)('shows 6 mm default margins and still accepts custom values for %s', async (kind) => {
+    const wrapper = mountSettings(kind);
+    const inputs = wrapper.findAll('.margin-grid input');
+    expect(inputs.map((input) => (input.element as HTMLInputElement).value)).toEqual(['6', '6', '6', '6']);
+    await inputs[0]!.setValue('12');
+    await flushPromises();
+    expect((wrapper.props('modelValue') as StampParameter).marginMm).toEqual({ top: '12', bottom: 6, left: 6, right: 6 });
+    wrapper.unmount();
+  });
+
   it('keeps region content when switching positions and inserts page numbers into the active region', async () => {
     const wrapper = mountSettings('headers-footers');
     await wrapper.get('textarea').setValue('Header');
@@ -25,7 +35,7 @@ describe('stamp settings controls', () => {
     await flushPromises();
     const state = wrapper.props('modelValue') as StampParameter;
     expect(state.regions).toMatchObject({ topCenter: 'Header', bottomRight: '<<1>>' });
-    await wrapper.get('input[placeholder="All Pages"]').setValue('1、3');
+    await wrapper.get('input[role="combobox"]').setValue('1、3');
     const payload = buildStampRequest('headers-footers', wrapper.props('modelValue') as StampParameter);
     expect(payload).toMatchObject({ pages: '1,3', regions: { topCenter: 'Header', bottomRight: '<<1>>' } });
     expect(wrapper.find('input[type="radio"]').exists()).toBe(false);
@@ -37,7 +47,7 @@ describe('stamp settings controls', () => {
     const state = { ...(wrapper.props('modelValue') as StampParameter), startNumber: 42, prefix: 'CASE-', suffix: '-A' };
     await wrapper.setProps({ modelValue: state });
     expect(wrapper.findAll('output').map((output) => output.text())).toEqual(['CASE-000042-A']);
-    await wrapper.get('input[placeholder="All Pages"]').setValue('1,3');
+    await wrapper.get('input[role="combobox"]').setValue('1,3');
     expect(wrapper.findAll('output').map((output) => output.text())).toEqual(['CASE-000042-A', 'CASE-000043-A']);
     wrapper.getComponent({ name: 'WatermarkColorPicker' }).vm.$emit('update:modelValue', '#396FFA');
     wrapper.getComponent({ name: 'WatermarkColorPicker' }).vm.$emit('update:opacity', '0.5');

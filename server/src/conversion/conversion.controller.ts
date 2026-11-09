@@ -33,7 +33,7 @@ import type { Request, Response } from 'express';
 import { ApiKeyGuard } from '../auth/guards/api-key.guard';
 import { ConvertTarget, DocumentAiOperation } from '../clients/conversion.client';
 import { ErrorCode } from '../common/errors/error-codes';
-import { contentDispositionAttachment, normalizeUploadedFilename, sanitizeFilename } from '../common/utils/filename';
+import { contentDispositionAttachment, normalizeUploadedFilename, resultFileExtension, sanitizeFilename } from '../common/utils/filename';
 import { ConversionService } from './conversion.service';
 import { validatePdfImageOptions } from './dpi-validation';
 
@@ -233,7 +233,7 @@ export class ConversionController {
    */
   private send(res: Response, result: import('./conversion.service').ConversionResult, localFilename?: string): void {
     const contentType = result.contentType ?? 'application/octet-stream';
-    const filename = sanitizeFilename(preferredDownloadFilename(result.filename, localFilename), 'conversion-result');
+    const filename = sanitizeFilename(preferredDownloadFilename(result.filename, localFilename, contentType), 'conversion-result');
     const responseBytes = result.buffer.length;
     const startedAt = Date.now();
     this.logger.debug(`conversion response send ${JSON.stringify({
@@ -291,11 +291,16 @@ function conversionDownloadName(
 function preferredDownloadFilename(
   upstreamFilename: string | undefined,
   localFilename: string | undefined,
+  contentType: string,
 ): string | undefined {
   const upstream = sanitizeFilenameOrEmpty(upstreamFilename);
   const local = sanitizeFilenameOrEmpty(localFilename);
-  if (!upstream) return local && hasNonAscii(local) ? local : undefined;
-  if (local && hasNonAscii(local) && !hasNonAscii(upstream)) return local;
+  // Repair the source basename without changing the actual output container.
+  const extension = outputExtensionFromFilename(upstream)
+    ?? resultFileExtension(contentType, outputExtensionFromFilename(local));
+  const localOutput = local && extension ? withExtension(local, extension, false) : local;
+  if (!upstream) return localOutput || undefined;
+  if (local && hasNonAscii(local) && !hasNonAscii(upstream)) return localOutput;
   return upstream;
 }
 

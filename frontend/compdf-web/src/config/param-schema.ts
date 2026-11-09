@@ -82,7 +82,7 @@ export interface UploadParameter {
   imgDpi: number;
   rotateAngle: string;
   insertActionType: 'BLANK' | 'FROM_PDF';
-  insertPageSize: 'a4' | 'a3' | 'legal' | 'custom';
+  insertPageSize: 'a4' | 'a3' | 'letter' | 'legal' | 'custom';
   insertIndex: string; insertCount: string; insertWidth: string; insertHeight: string; insertTargetPassword: string; sourcePages: string;
   compressQuality: 'low' | 'medium' | 'high' | 'custom';
   compressCustomFlags: string[]; compressImageQuality: string;
@@ -216,7 +216,7 @@ function buildPdfEditPayload(input: BuildRequestInput): { payload: Record<string
     return { payload: {
       pageRanges: files.map((_, i) => (parameter.mergeFilePageRanges as string[] | undefined)?.[i] || 'all'),
       passwords: files.map((_, i) => (parameter.mergePasswords as string[] | undefined)?.[i] || password || null),
-      outputFileName,
+      outputFileName: parameter.outputFileName.trim() || 'merged.pdf',
     } };
   }
   if (toType === 'split') {
@@ -280,11 +280,12 @@ function buildPdfEditPayload(input: BuildRequestInput): { payload: Record<string
   if (toType === 'pdfa') {
     return { payload: {
       standard: parameter.pdfStandard,
-      outputFileName,
-      uaConfig: {
-        title: parameter.outputTitle,
-        language: parameter.outputLanguage,
-      },
+      ...(parameter.pdfStandard === 'pdfua1' ? {
+        uaConfig: {
+          title: parameter.outputTitle,
+          language: parameter.outputLanguage,
+        },
+      } : {}),
     } };
   }
   return { payload: { pages: pageRanges, outputFileName } };
@@ -335,6 +336,14 @@ export function watermarkValidationKey(
     return 'pdfToolDetail.upload.errors.watermarkSpacingInvalid';
   }
 
+  return null;
+}
+
+export function insertBlankValidationKey(parameter: Pick<UploadParameter, 'insertCount' | 'insertWidth' | 'insertHeight'>): string | null {
+  const values = [parameter.insertCount, parameter.insertWidth, parameter.insertHeight].map((value) => numericValue(value));
+  if (values.some((value) => value === null || value <= 0) || (values[0] !== null && !Number.isInteger(values[0]))) {
+    return 'pdfToolDetail.upload.errors.insertBlankParametersInvalid';
+  }
   return null;
 }
 

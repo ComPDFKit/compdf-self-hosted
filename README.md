@@ -44,37 +44,53 @@ Whether you're building an internal document platform, document automation workf
 
 ## Features
 
-![Tools](images/tools.png)
+![feature](images/tools.png)
 
-### 1. PDF Tool Center
+
 
 ComPDF Self-Hosted provides a ready-to-use **open source PDF editor**, **open source PDF converter**, and **open source image converter** center directly accessible through a browser.
 
-| Category | Features |
-| --- | --- |
-| PDF Editing | Merge, split, rotate, insert/delete/extract pages, compress, add/remove watermarks, encrypt/decrypt, add/remove headers and footers, add/remove Bates numbers |
-| PDF to Others | Word, Excel, PowerPoint, images, HTML, TXT, CSV, RTF, JSON, searchable PDF, OFD, Markdown and PDF/A |
-| Others to PDF | Word, Excel, PowerPoint, HTML, TXT, CSV, RTF and PNG |
-| Image to Others | Word, Excel, PowerPoint, HTML, CSV, TXT, RTF, JSON and PDF |
+| Category         | Features                                                                                                                                    |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Batch Processing | Batch upload and processing of files                                                                                                        |
+| MCP Server       | Connect Agent platforms through MCP for file processing                                                                                     |
+| PDF Editing      | Merge, split, rotate, insert, delete, extract PDF pages, compress PDF files                                                                 |
+| PDF Security     | Add watermark, remove watermark, encrypt, decrypt, add header and footer, remove header and footer, add bates numbers, remove bates numbers |
+| PDF to Others    | Word, Excel, PowerPoint, images, HTML, TXT, CSV, RTF, JSON, searchable PDF, OFD, Markdown and PDF/A                                         |
+| Others to PDF    | Word, Excel, PowerPoint, HTML, TXT, CSV, RTF and PNG                                                                                        |
+| Image to Others  | Word, Excel, PowerPoint, HTML, CSV, TXT, RTF, JSON and PDF                                                                                  |
 
 Available formats and processing limits depend on the deployed App image and SDK license. Repository code is open source; commercial PDF/Conversion SDKs and valid runtime licenses are provided separately.
 
-### 2. Dashboard Console
+### Dashboard Console
 
 ComPDF Self-Hosted provides a unified management console for viewing API Key details, API usage, and License status, as well as supporting operation log auditing, account management, and core system configuration.
+
+Log in to the Dashboard with the initial account and password, then change the username and password before use.
+
+- Initial account: admin
+
+- Initial password: admin
 
 ![Dashboard](images/dashboard.png)
 
 * Overview Panel: Displays API Key details, API usage statistics, License scope, and usage status.
 
+* License Management: View the product's License file, running status, and version permissions; supports one-click replacement of the License file and product upgrades.
+
+* API Key Management: View and copy your API Key and its running status to authorize third-party systems, services, or Agents to call the API for document processing.
+
+* MCP Server: Obtain configuration code and API Keys for Agent platforms to connect them and enable professional PDF processing capabilities for AI.
+
 * Operation Logs: Track, search, and export all the operation logs.
+
+* Product updates: Check the latest version details, download the new version, and enable it.
 
 * Account Management: Set the username and password.
 
 * System Settings: Set the name, logo, and theme color of the system.
-* License management and product updates: View runtime license status and manage administrator-approved updates.
 
-### 3. Batch Processing and API Integration
+### Batch Processing and API Integration
 
 - Batch uploads, per-file passwords, sequential processing, status tracking, failed-file retry and ZIP downloads.
 - REST APIs for integration with internal systems and document automation workflows.
@@ -88,6 +104,8 @@ All three methods below are supported. Reserve storage for images, data and back
 Default Infra/App images target `linux/amd64`.
 Docker methods require Docker Engine/Desktop in Linux container mode and
 Compose v2 supporting `up --wait --wait-timeout`.
+
+**A License will be generated automatically during deployment, so you do not need to provide one. To upgrade to a paid version, [contact Sales](https://www.compdf.com/contact-sales?utm_source=github_ai_selfhosted_oldopen_en&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_en&ref_platform_id=github_compdf_en) and replace it in the Dashboard License management module.**
 
 ### Method 1: Standalone installer (no clone)
 
@@ -195,11 +213,11 @@ port 8080; it may listen on all host interfaces. Use `up` to create containers;
 
 ### Access and first configuration
 
-| Entry | Default address |
-| --- | --- |
-| ComPDF Web | `http://localhost:8080/` |
-| Dashboard | `http://localhost:8080/admin` |
-| Health | `http://localhost:8080/api/v1/status` |
+| Entry      | Default address                       |
+| ---------- | ------------------------------------- |
+| ComPDF Web | `http://localhost:8080/`              |
+| Dashboard  | `http://localhost:8080/admin`         |
+| Health     | `http://localhost:8080/api/v1/status` |
 
 For a remote Docker host, replace `localhost` with its controlled endpoint.
 First initialization creates `admin / admin`; change the password after login.
@@ -265,14 +283,14 @@ Infra supplies MySQL, Redis and object storage. App runs the PDF/conversion SDK.
 Server provides APIs, batch/MCP logic and the packaged UI. Optional Updater manages
 approved updates. Commercial SDK source is not included.
 
-| Path | Purpose |
-| --- | --- |
-| `frontend/compdf-web/` | Vue 3 + Vite UI and Dashboard |
-| `server/` | NestJS + TypeScript backend |
-| `updater/` | Go updater/publisher and container bootstrap |
-| `deploy/`, `helm/` | Canonical deployment assets |
-| `deployment/`, `release/`, `migrations/` | Contracts, versions and forward upgrades |
-| `configs/` | Settings and initial database schema |
+| Path                                     | Purpose                                      |
+| ---------------------------------------- | -------------------------------------------- |
+| `frontend/compdf-web/`                   | Vue 3 + Vite UI and Dashboard                |
+| `server/`                                | NestJS + TypeScript backend                  |
+| `updater/`                               | Go updater/publisher and container bootstrap |
+| `deploy/`, `helm/`                       | Canonical deployment assets                  |
+| `deployment/`, `release/`, `migrations/` | Contracts, versions and forward upgrades     |
+| `configs/`                               | Settings and initial database schema         |
 
 ## Source development
 
@@ -307,12 +325,12 @@ the complete repository, not the minimal directory created by the installer.
 
 ## Other deployment assets
 
-| Option | Purpose | Files |
-| --- | --- | --- |
-| Kubernetes / Helm | Cluster deployment using the bundled chart | [Chart](helm/compdf-self-hosted/) |
-| Source / binary | Controlled Linux Server/UI deployment; App/Infra remain separate | [Packaging scripts](deploy/binary/) |
-| Nginx / Keepalived | TLS and entrypoint availability; application/data HA needs separate design | [Configuration](deploy/nginx/) |
-| Offline delivery | Image export and signed offline packages | [Offline tools](deploy/offline/) |
+| Option             | Purpose                                                                    | Files                               |
+| ------------------ | -------------------------------------------------------------------------- | ----------------------------------- |
+| Kubernetes / Helm  | Cluster deployment using the bundled chart                                 | [Chart](helm/compdf-self-hosted/)   |
+| Source / binary    | Controlled Linux Server/UI deployment; App/Infra remain separate           | [Packaging scripts](deploy/binary/) |
+| Nginx / Keepalived | TLS and entrypoint availability; application/data HA needs separate design | [Configuration](deploy/nginx/)      |
+| Offline delivery   | Image export and signed offline packages                                   | [Offline tools](deploy/offline/)    |
 
 Nginx is an entrypoint layer; online/offline describes delivery. These options
 can accompany Compose or Kubernetes. Compose Updater does not manage Kubernetes
@@ -332,6 +350,7 @@ Actual features, page limits and concurrency are determined by the issued licens
 | PDF Conversion        | ✅            | ✅          |
 | Web UI                | ✅            | ✅          |
 | Dashboard             | ✅            | ✅          |
+| Batch Processing      | ✅            |            |
 | Watermark-Free Output | ❌            | ✅          |
 | Unlimited Pages       | ❌            | ✅          |
 | Custom Concurrency    | ❌            | ✅          |

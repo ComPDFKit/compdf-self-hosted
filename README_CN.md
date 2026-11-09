@@ -44,34 +44,44 @@
 
 ## 功能支持
 
-### 1. PDF 工具中心
-
-![Tools](images/tools.png)
+![feature](images/tools.png)
 
 ComPDF Self-Hosted 提供可直接在浏览器中使用的**开源 PDF 编辑器**、**开源 PDF 转换器**与**开源图片转换器**中心。
 
-| 功能类别 | 功能详情 |
-| --- | --- |
-| PDF 编辑 | 合并、拆分、旋转、插入／删除／提取页面、压缩、添加／移除水印、加密／解密、添加／移除页眉页脚及贝茨码 |
-| PDF 转其他格式 | Word、Excel、PowerPoint、图片、HTML、TXT、CSV、RTF、JSON、可搜索 PDF、OFD、Markdown 与 PDF/A |
-| 其他格式转 PDF | Word、Excel、PowerPoint、HTML、TXT、CSV、RTF 与 PNG |
-| 图片转其他格式 | Word、Excel、PowerPoint、HTML、CSV、TXT、RTF、JSON 与 PDF |
+| 功能类别       | 功能详情                                                                        |
+| ---------- | --------------------------------------------------------------------------- |
+| 批量处理       | 支持批量上传并处理文件                                                                 |
+| MCP Server | 支持 MCP 形式串接第三方 Agent 平台进行文件处理                                               |
+| PDF 编辑     | 合并、拆分、旋转、插入、删除、以及提取 PDF 页面、压缩 PDF文件                                         |
+| PDF 安全     | 给PDF 文件添加水印、移除水印、加密、解密、添加页眉页脚、移除页眉页脚、添加贝茨码、移除贝茨码                            |
+| PDF 转其他格式  | Word、Excel、PowerPoint、图片、HTML、TXT、CSV、RTF、JSON、可搜索 PDF、OFD、Markdown 与 PDF/A |
+| 其他格式转 PDF  | Word、Excel、PowerPoint、HTML、TXT、CSV、RTF 与 PNG                                |
+| 图片转其他格式    | Word、Excel、PowerPoint、HTML、CSV、TXT、RTF、JSON 与 PDF                           |
 
 可用格式与处理限制取决于部署的 App 镜像和 SDK 授权。仓库代码开源；商业 PDF／Conversion SDK 与有效运行许可证单独提供。
 
-### 2. Dashboard 控制台
+### Dashboard 控制台
 
 ComPDF Self-Hosted 提供统一管理控制台，用于查看 API Key、API 调用情况与 License 状态，并支持操作日志审计、账号管理及系统基础配置等核心功能。
 
+使用初始密码和账号即可登录您的 Dashboard，登录后请更改用户名和密码再进行使用
+
+- 初始账号：admin
+
+- 初始密码：admin
+
 ![Dashboard](images/dashboard.png)
 
-* 概览面板：展示 API Key 详情、API 调用统计、License 授权范围及使用状态等信息。
+* 概览面板：展示 API Key 详情、API 调用统计、License 授权范围及使用状态等信息
+* License 管理：查看本产品的 License 文件、运行状态及版本权限；支持一键替换 License 文件并完成产品升级
+* API Key 管理：查看并复制您的 API Key 和运行状态，以授权第三方系统、服务或 Agents 调用 API 进行文档处理
+* MCP Server：获取各 Agent 平台的配置代码以及 API Key，以串接 Agent 平台，赋能您的 AI 专业的 PDF 处理能力
 * 操作日志：跟踪、搜索并导出所有操作日志
+* 产品更新：检查最新版本详细、下载新版本并启用
 * 账号管理：设置用户名和密码
 * 系统设置：配置系统名称、Logo 和主题色
-* License 管理与产品更新：查看运行授权状态，管理经管理员确认的产品更新。
 
-### 3. 批量处理与 API 集成
+### 批量处理与 API 集成
 
 - 批量文件上传、逐文件密码、顺序处理、状态查询、失败重试与 ZIP 下载。
 - REST API：对接内部系统与文档自动化流程。
@@ -83,7 +93,7 @@ ComPDF Self-Hosted 提供统一管理控制台，用于查看 API Key、API 调�
 
 以下三种部署方式均受支持。请预留镜像、数据与备份空间。
 默认 Infra/App 镜像面向 `linux/amd64`。Docker 方式需要 Docker Engine 或 Linux
-容器模式的 Docker Desktop，以及支持 `up --wait --wait-timeout` 的 Compose v2。
+容器模式的 Docker Desktop，以及支持 `up --wait --wait-timeout` 的 Compose v2。**部署中 License 会为您自动生成，无需您提供，若要升级为付费版本可[联系销售](https://www.compdf.com/contact-sales?utm_source=github_ai_selfhosted_oldopen_zh&utm_medium=referral&utm_campaign=github_ai_selfhosted_oldopen_zh&ref_platform_id=github_compdf_zh)进行购买并在 Dashboard 的 License 管理模块替换即可。**
 
 ### 方式一：脚本安装（免克隆）
 
@@ -180,11 +190,11 @@ Compose 项目名并保留持久化卷。基础 Compose 发布 8080 端口，可
 
 ### 访问与首次配置
 
-| 入口 | 默认地址 |
-| --- | --- |
-| ComPDF Web | `http://localhost:8080/` |
-| Dashboard | `http://localhost:8080/admin` |
-| 健康状态 | `http://localhost:8080/api/v1/status` |
+| 入口         | 默认地址                                  |
+| ---------- | ------------------------------------- |
+| ComPDF Web | `http://localhost:8080/`              |
+| Dashboard  | `http://localhost:8080/admin`         |
+| 健康状态       | `http://localhost:8080/api/v1/status` |
 
 远程 Docker 主机请将 `localhost` 替换为受控入口。首次初始化账号为 `admin / admin`，
 登录后请修改密码。对外使用前配置 HTTPS、CORS 与访问控制。
@@ -194,7 +204,7 @@ Compose 项目名并保留持久化卷。基础 Compose 发布 8080 端口，可
 
 客户端检查本仓库的签名 stable 更新源。只有发布了更高产品版本才提示升级，普通源码
 提交不会直接触发安装。经校验与管理员确认后，Updater 从 Docker Hub 拉取固定 digest
-的 App／Server 镜像，备份数据、执行声明的数据库迁移、重启并验证真实 PDF 处理。
+的 App/Server 镜像，备份数据、执行声明的数据库迁移、重启并验证真实 PDF 处理。
 
 更新源缺失、无法访问或清单过期时，不会确认为检查成功。安装前由 Updater 独立验证签名。
 
@@ -234,14 +244,14 @@ docker compose --env-file .env up -d --wait --wait-timeout 600
 Infra 提供 MySQL、Redis 和对象存储；App 运行 PDF／转换 SDK；Server 提供接口、
 批量任务、MCP 和打包前端；可选 Updater 执行经确认的更新。本仓库不包含商业 SDK 源码。
 
-| 路径 | 用途 |
-| --- | --- |
-| `frontend/compdf-web/` | Vue 3 + Vite 工具中心与 Dashboard |
-| `server/` | NestJS + TypeScript 后端 |
-| `updater/` | Go 更新器、发布器与容器启动逻辑 |
-| `deploy/`, `helm/` | 实际维护的部署工具 |
-| `deployment/`, `release/`, `migrations/` | 配置规范、版本与正式迁移 |
-| `configs/` | 运行设置与初始数据库 SQL |
+| 路径                                       | 用途                           |
+| ---------------------------------------- | ---------------------------- |
+| `frontend/compdf-web/`                   | Vue 3 + Vite 工具中心与 Dashboard |
+| `server/`                                | NestJS + TypeScript 后端       |
+| `updater/`                               | Go 更新器、发布器与容器启动逻辑            |
+| `deploy/`, `helm/`                       | 实际维护的部署工具                    |
+| `deployment/`, `release/`, `migrations/` | 配置规范、版本与正式迁移                 |
+| `configs/`                               | 运行设置与初始数据库 SQL               |
 
 ## 源码开发
 
@@ -275,12 +285,12 @@ App 与 Infra 仍使用配置中的镜像。这些源码命令仅适用于完整
 
 ## 其他部署文件
 
-| 方案 | 适用场景 | 文件 |
-| --- | --- | --- |
-| Kubernetes / Helm | 使用随附 Chart 进行集群部署 | [Chart](helm/compdf-self-hosted/) |
-| 源码／二进制 | Linux Server/UI 受控部署；App/Infra 独立提供 | [打包脚本](deploy/binary/) |
-| Nginx / Keepalived | TLS 与入口可用性；应用与数据高可用需单独设计 | [入口配置](deploy/nginx/) |
-| 离线交付 | 镜像导出与签名离线安装包 | [离线工具](deploy/offline/) |
+| 方案                 | 适用场景                                | 文件                                |
+| ------------------ | ----------------------------------- | --------------------------------- |
+| Kubernetes / Helm  | 使用随附 Chart 进行集群部署                   | [Chart](helm/compdf-self-hosted/) |
+| 源码／二进制             | Linux Server/UI 受控部署；App/Infra 独立提供 | [打包脚本](deploy/binary/)            |
+| Nginx / Keepalived | TLS 与入口可用性；应用与数据高可用需单独设计            | [入口配置](deploy/nginx/)             |
+| 离线交付               | 镜像导出与签名离线安装包                        | [离线工具](deploy/offline/)           |
 
 Nginx 属于入口层；在线／离线属于交付方式，可以与 Compose 或 Kubernetes 组合使用。
 Compose 更新器不管理 Kubernetes 或 Apple container。
@@ -299,6 +309,7 @@ Compose 更新器不管理 Kubernetes 或 Apple container。
 | PDF 转换 | ✅   | ✅   |
 | Web 界面 | ✅   | ✅   |
 | 仪表板    | ✅   | ✅   |
+| 批量文件处理 | ✅   |     |
 | 无水印输出  | ❌   | ✅   |
 | 不限制页数  | ❌   | ✅   |
 | 自定义并发数 | ❌   | ✅   |

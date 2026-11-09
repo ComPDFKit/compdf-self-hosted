@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useId } from 'vue';
 import { useI18n } from 'vue-i18n';
+import PageRangeInput from './PageRangeInput.vue';
 import type { UploadParameter } from '@/config/param-schema';
 import WatermarkColorPicker from './WatermarkColorPicker.vue';
 
@@ -16,8 +17,7 @@ const label = (key: string) => t(`pdfToolDetail.upload.settings.${key}`).replace
 <template>
   <div class="watermark-settings">
     <label class="watermark-field">{{ label('pageRange') }}
-      <input v-model="parameter.pageRanges" type="text" :disabled="disabled" :aria-label="label('pageRange')"
-        :placeholder="t('batchTools.stamp.allPages')">
+      <PageRangeInput v-model="parameter.pageRanges" :disabled="disabled" :aria-label="label('pageRange')" />
     </label>
     <fieldset class="watermark-type" :disabled="disabled">
       <legend>{{ label('watermarkType') }}</legend>

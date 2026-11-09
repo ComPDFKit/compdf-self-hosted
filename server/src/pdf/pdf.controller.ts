@@ -61,7 +61,7 @@ export class PdfController {
     const request = extractRequest(req.body);
     this.logIncoming('merge', request, list);
     const result = await this.client.merge(list, request, tokenOf(req));
-    this.sendFile(res, result, 'merged.pdf');
+    this.sendFile(res, result, 'merged.pdf', requestedOutputFilename(request) ?? 'merged.pdf');
   }
 
   @Post('split')
@@ -280,7 +280,7 @@ export class PdfController {
     const request = extractRequest(req.body);
     this.logIncoming('pdfa', request, [file, iccFile]);
     const result = await this.client.convertStandard(file, iccFile, request, tokenOf(req));
-    this.sendFile(res, result, 'standardized.pdf');
+    this.sendFile(res, result, 'standardized.pdf', normalizeUploadedFilename(file.originalname));
   }
 
   @Post('compress')

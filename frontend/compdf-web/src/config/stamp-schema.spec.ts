@@ -38,13 +38,22 @@ describe('stamp defaults and request contract', () => {
     expect(headers.position).toBe('topCenter');
     expect(headers.pageOffset).toBe(1);
     expect(bates).toMatchObject({ position: 'bottomRight', pageOffset: 0, startNumber: 1, digits: 6, numberingMode: 'per-file' });
-    expect(headers.marginMm).toEqual({ top: 30, bottom: 30, left: 30, right: 30 });
+    expect(headers.marginMm).toEqual({ top: 6, bottom: 6, left: 6, right: 6 });
     headers.marginMm.top = 0;
     headers.regions.topCenter = 'Changed';
-    expect(bates.marginMm.top).toBe(30);
+    expect(bates.marginMm).toEqual({ top: 6, bottom: 6, left: 6, right: 6 });
+    expect(defaultStampParameter('headers-footers').marginMm).toEqual({ top: 6, bottom: 6, left: 6, right: 6 });
     expect(defaultStampParameter('headers-footers').regions.topCenter).toBe('');
     expect(stampValidationKey('headers-footers', defaultStampParameter('headers-footers'))).toBe('batchTools.stamp.errors.content');
     expect(stampValidationKey('bates', bates)).toBeNull();
+  });
+
+  it.each(['headers-footers', 'bates'] as const)('converts the default 6 mm margins to SDK points for %s', (kind) => {
+    const parameter = kind === 'headers-footers' ? validHeaders() : defaultStampParameter(kind);
+    const request = buildStampRequest(kind, parameter);
+    for (const side of ['top', 'bottom', 'left', 'right'] as const) {
+      expect((request.margin as Record<string, number>)[side]).toBeCloseTo(6 * 72 / 25.4);
+    }
   });
 
   it('maps header text and exact placeholders without expanding dates or variables', () => {
@@ -105,7 +114,7 @@ describe('stamp defaults and request contract', () => {
     const result = buildStampRequest('bates', parameter);
     expect(result).toEqual({
       fontName: 'Helvetica', fontSize: 12, textColor: '#000000',
-      margin: { left: 30 * 72 / 25.4, top: 30 * 72 / 25.4, right: 30 * 72 / 25.4, bottom: 30 * 72 / 25.4 },
+      margin: { left: 6 * 72 / 25.4, top: 6 * 72 / 25.4, right: 6 * 72 / 25.4, bottom: 6 * 72 / 25.4 },
       pages: 'all', position: 'bottomRight', startNumber: 42, digits: 6, prefix: 'CASE-', suffix: '-甲', pageOffset: 0,
     });
     expect(result).not.toHaveProperty('numberingMode');
@@ -122,7 +131,7 @@ describe('stamp defaults and request contract', () => {
 });
 
 describe('shared stamp validation', () => {
-  it.each(['1', '1-3', '1,3,5', '1-3,5', '1、3-5、8', '1，3-5', ' 1, 3 - 5 ', '5-5', '999999'])('accepts page syntax %s without claiming document bounds', (customPages) => {
+  it.each(['1', '1-3', '1,3,5', '1-3,5', '1, 3-5, 8', '1，3-5', ' 1, 3 - 5 ', '5-5', '999999'])('accepts page syntax %s without claiming document bounds', (customPages) => {
     const parameter = { ...defaultStampParameter('bates'), pageRange: 'custom' as const, customPages };
     expect(stampValidationKey('bates', parameter)).toBeNull();
   });

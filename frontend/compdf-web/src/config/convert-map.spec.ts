@@ -76,7 +76,7 @@ describe('convert-map', () => {
   it('image-to-word → convert-type img/docx', () => {
     const t = resolveTool('image-to-word')!;
     expect(t.endpoint).toEqual({ kind: 'convert-type', type: 'img/docx' });
-    expect(t.accept).toBe('.png,.jpg,.jpeg,.jp2000,.bmp,.tiff,.webp,.gif');
+    expect(t.accept).toBe('.png,.jpg,.jpeg,.jp2,.jp2000,.bmp,.tiff,.webp');
   });
 
   it('pdf-to-editable → convert-type pdf/pdf', () => {
@@ -115,7 +115,7 @@ describe('convert-map', () => {
   it('image-to-pdf → convert-to-pdf png/pdf (no explicit type; auto-infer)', () => {
     const t = resolveTool('image-to-pdf')!;
     expect(t.endpoint.kind).toBe('convert-to-pdf');
-    expect(t.accept).toBe('.png,.jpg,.jpeg,.jp2000,.bmp,.tiff,.webp,.gif');
+    expect(t.accept).toBe('.png,.jpg,.jpeg,.jp2,.jp2000,.bmp,.tiff,.webp');
   });
 
   it('merge → pdf merge, multiple files', () => {
@@ -176,5 +176,14 @@ describe('convert-map', () => {
         expect(CONVERSION_FEATURES[key], `${t.slug} → ${key} has no CONVERSION_FEATURES entry`).toBeDefined();
       }
     });
+  });
+});
+
+
+describe('JPEG 2000 upload extensions', () => {
+  it('accepts both .jp2 and legacy .jp2000 extensions', () => {
+    const accept = resolveTool('image-to-word')!.accept.split(',');
+    expect(accept).toContain('.jp2');
+    expect(accept).toContain('.jp2000');
   });
 });
