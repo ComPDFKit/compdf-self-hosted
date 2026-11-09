@@ -350,7 +350,7 @@ Actual features, page limits and concurrency are determined by the issued licens
 | PDF Conversion        | ✅            | ✅          |
 | Web UI                | ✅            | ✅          |
 | Dashboard             | ✅            | ✅          |
-| Batch Processing      | ✅            |            |
+| Batch Processing      | ✅            | ✅          |
 | Watermark-Free Output | ❌            | ✅          |
 | Unlimited Pages       | ❌            | ✅          |
 | Custom Concurrency    | ❌            | ✅          |
